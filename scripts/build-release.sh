@@ -2,7 +2,22 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-v1.0.0}"
+
+if [[ $# -gt 1 ]]; then
+    echo "Usage: $0 [vVERSION]" >&2
+    exit 2
+fi
+
+if [[ $# -eq 1 ]]; then
+    VERSION="$1"
+else
+    PACKAGE_VERSION="$(
+        cd "$ROOT"
+        python3 -c 'from betabrite_controller import __version__; print(__version__)'
+    )"
+    VERSION="v${PACKAGE_VERSION}"
+fi
+
 NAME="betabrite-controller-${VERSION}"
 DIST="$ROOT/dist"
 STAGE="$DIST/$NAME"
@@ -32,7 +47,7 @@ cp -a "$ROOT/betabrite_controller" "$STAGE/"
 cp -a "$ROOT/packaging" "$STAGE/"
 cp -a "$ROOT/docs" "$STAGE/"
 
-find "$STAGE" -type d -name __pycache__ -prune -exec rm -rf {} +
+find "$STAGE" -type d \( -name __pycache__ -o -name '*.egg-info' \) -prune -exec rm -rf {} +
 find "$STAGE" -type f -name '*.pyc' -delete
 
 (
@@ -56,4 +71,4 @@ PY
     sha256sum "$NAME.tar.gz" "$NAME.zip" > SHA256SUMS
 )
 
-printf 'Built release artifacts in %s\n' "$DIST"
+printf 'Built source release artifacts in %s\n' "$DIST"

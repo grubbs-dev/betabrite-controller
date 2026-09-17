@@ -52,19 +52,15 @@ fail() {
 
 banner
 
-echo "  This installer will configure everything needed to control"
-echo "  a supported Alpha/BetaBrite LED sign from Fedora Linux."
+echo "  This installer configures the current Fedora desktop application"
+echo "  and the cross-platform BetaBrite controller package."
 echo
 echo "  Install location: $INSTALL_DIR"
 echo "  User:             $INSTALL_USER"
 echo
 
-# ------------------------------------------------------------
-# Fedora
-# ------------------------------------------------------------
-
 if ! command -v dnf >/dev/null 2>&1; then
-    fail "Automatic installation currently supports Fedora Linux."
+    fail "Automatic desktop installation currently supports Fedora Linux."
 fi
 
 step "Checking Fedora dependencies"
@@ -94,36 +90,24 @@ fi
 command -v python3 >/dev/null 2>&1 ||
     fail "Python 3 installation failed."
 
-python3 -c \
-    'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk' \
-    >/dev/null 2>&1 ||
-    fail "GTK4 Python bindings could not be loaded."
-
-good "GTK4 runtime available"
-
-# ------------------------------------------------------------
-# Application
-# ------------------------------------------------------------
-
-step "Installing BetaBrite Controller"
+step "Installing desktop application files"
 
 $SUDO rm -rf "$INSTALL_DIR"
 $SUDO mkdir -p "$INSTALL_DIR"
 
-$SUDO cp -r \
-    "$SCRIPT_DIR/betabrite_controller" \
-    "$INSTALL_DIR/"
-
-$SUDO cp \
-    "$SCRIPT_DIR/betabrite" \
+$SUDO install -Dm755 \
     "$SCRIPT_DIR/betabrite-gui" \
-    "$INSTALL_DIR/"
+    "$INSTALL_DIR/betabrite-gui"
 
-good "Application files installed"
+$SUDO install -Dm644 \
+    "$SCRIPT_DIR/README.md" \
+    "$INSTALL_DIR/README.md"
 
-# ------------------------------------------------------------
-# Python runtime
-# ------------------------------------------------------------
+$SUDO install -Dm644 \
+    "$SCRIPT_DIR/CHANGELOG.md" \
+    "$INSTALL_DIR/CHANGELOG.md"
+
+good "Desktop application files installed"
 
 step "Building isolated controller runtime"
 
@@ -134,21 +118,31 @@ $SUDO python3 -m venv \
 $SUDO "$VENV_DIR/bin/python" -m pip install \
     --disable-pip-version-check \
     --quiet \
-    --upgrade pip
+    --upgrade pip setuptools wheel
 
 $SUDO "$VENV_DIR/bin/python" -m pip install \
     --disable-pip-version-check \
     --quiet \
-    -r "$SCRIPT_DIR/requirements.txt"
+    "$SCRIPT_DIR"
 
-$SUDO "$VENV_DIR/bin/python" -c \
-    'import alphasign; import serial'
+if ! "$VENV_DIR/bin/python" - <<'PYTEST'
+import gi
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk  # noqa: F401
 
-good "Alpha protocol runtime ready"
+import alphasign
+import serial
+from importlib.metadata import version
 
-# ------------------------------------------------------------
-# Legacy cleanup
-# ------------------------------------------------------------
+print(f"      package version: {version('betabrite-controller')}")
+print("      GTK4 bindings: OK")
+print("      serial runtime: OK")
+PYTEST
+then
+    fail "Installed Python runtime health check failed."
+fi
+
+good "Packaged controller runtime ready"
 
 step "Installing command launchers"
 
@@ -160,7 +154,7 @@ $SUDO rm -f \
 
 $SUDO tee "$BIN_DIR/betabrite" >/dev/null <<EOF
 #!/usr/bin/env bash
-exec "$VENV_DIR/bin/python" "$INSTALL_DIR/betabrite" "\$@"
+exec "$VENV_DIR/bin/betabrite" "\$@"
 EOF
 
 $SUDO tee "$BIN_DIR/betabrite-gui" >/dev/null <<EOF
@@ -175,10 +169,6 @@ $SUDO chmod 755 \
 good "CLI installed: $BIN_DIR/betabrite"
 good "GUI installed: $BIN_DIR/betabrite-gui"
 
-# ------------------------------------------------------------
-# Desktop application
-# ------------------------------------------------------------
-
 step "Adding desktop application"
 
 $SUDO install -Dm644 \
@@ -191,11 +181,7 @@ fi
 
 good "BetaBrite Controller added to application menu"
 
-# ------------------------------------------------------------
-# Hardware
-# ------------------------------------------------------------
-
-step "Configuring BetaBrite USB hardware"
+step "Configuring tested BetaBrite USB hardware"
 
 $SUDO install -Dm644 \
     "$SCRIPT_DIR/packaging/99-betabrite.rules" \
@@ -217,10 +203,6 @@ fi
 
 good "Serial hardware permissions configured"
 
-# ------------------------------------------------------------
-# Installation health check
-# ------------------------------------------------------------
-
 step "Running installation health check"
 
 [[ -x "$BIN_DIR/betabrite" ]] ||
@@ -235,17 +217,19 @@ step "Running installation health check"
 [[ -f "$UDEV_DIR/99-betabrite.rules" ]] ||
     fail "USB hardware rule was not installed."
 
-if ! "$VENV_DIR/bin/python" - <<'PYTEST'
-from betabrite_controller.controller import BetaBriteController
+"$VENV_DIR/bin/betabrite" --version ||
+    fail "Installed CLI could not start."
 
-controller = BetaBriteController()
-print("      controller backend: OK")
-PYTEST
-then
-    fail "Controller backend health check failed."
-fi
+"$VENV_DIR/bin/betabrite" --list-ports >/dev/null ||
+    fail "Installed CLI device discovery failed."
 
-good "Controller backend operational"
+good "Controller package and CLI operational"
+
+DETECTED="$("$VENV_DIR/bin/python" - <<'PY'
+from betabrite_controller.devices import list_candidate_devices
+print(", ".join(device.device for device in list_candidate_devices()))
+PY
+)"
 
 echo
 echo "  ╔══════════════════════════════════════════════════════════╗"
@@ -253,11 +237,11 @@ echo "  ║                 INSTALLATION COMPLETE                    ║"
 echo "  ╚══════════════════════════════════════════════════════════╝"
 echo
 
-if [[ -e /dev/betabrite ]]; then
-    good "BetaBrite USB adapter detected: /dev/betabrite"
+if [[ -n "$DETECTED" ]]; then
+    good "USB serial adapter detected: $DETECTED"
 else
-    warn "No BetaBrite USB adapter detected yet."
-    echo "      Plug in the configured USB-to-RJ12 adapter when ready."
+    warn "No USB serial adapter detected yet."
+    echo "      Plug in the BetaBrite USB-to-RJ12 adapter when ready."
 fi
 
 if [[ "$GROUP_CHANGED" -eq 1 ]]; then
@@ -282,6 +266,9 @@ echo
 echo "  TERMINAL CONTROL"
 echo
 echo '      betabrite "HELLO WORLD"'
+echo "      betabrite --check-connection"
+echo
+echo "  User settings are stored separately and survive application upgrades."
 echo
 echo "  Ready."
 echo
