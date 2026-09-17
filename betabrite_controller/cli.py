@@ -13,7 +13,15 @@ from .controller import (
     MODES,
     SPECIALS,
 )
-from .devices import list_serial_devices
+from .devices import (
+    device_matches_preference,
+    diagnose_device,
+    forget_port,
+    list_candidate_devices,
+    list_serial_devices,
+    remember_port,
+)
+from .settings import load_settings, settings_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -68,15 +76,36 @@ def build_parser() -> argparse.ArgumentParser:
         "--port",
         default=DEFAULT_PORT,
         help=(
-            "Serial port. Use 'auto' for USB discovery "
-            "(default: auto). Examples: COM4, /dev/ttyUSB0, "
-            "/dev/cu.usbserial-XXXX"
+            "Serial port. Use 'auto' for discovery (default). "
+            "Examples: COM4, /dev/ttyUSB0, /dev/cu.usbserial-XXXX"
         ),
     )
     parser.add_argument(
         "--list-ports",
         action="store_true",
-        help="List detected serial ports",
+        help="List detected USB serial adapters",
+    )
+    parser.add_argument(
+        "--list-all-ports",
+        action="store_true",
+        help="List every serial port, including system/legacy ports",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show adapter selection and saved-device diagnostics",
+    )
+    parser.add_argument(
+        "--remember-port",
+        nargs="?",
+        const="auto",
+        metavar="PORT",
+        help="Remember PORT for future automatic selection; omit PORT to use auto",
+    )
+    parser.add_argument(
+        "--forget-port",
+        action="store_true",
+        help="Forget the remembered serial adapter",
     )
     parser.add_argument(
         "--list-colors",
@@ -102,23 +131,55 @@ def print_items(title, items):
         print(f"  {name}")
 
 
-def print_ports() -> None:
-    devices = list_serial_devices()
-    print("\nDetected serial ports:")
+def print_ports(*, include_system: bool = False) -> None:
+    devices = list_serial_devices() if include_system else list_candidate_devices()
+    title = "Detected serial ports" if include_system else "Detected USB serial adapters"
+    print(f"\n{title}:")
 
     if not devices:
         print("  none")
         return
 
+    preference = load_settings().preferred_device
+
     for device in devices:
-        marker = "*" if device.preferred else " "
+        markers = []
+        if device.preferred:
+            markers.append("tested")
+        if preference is not None:
+            if device_matches_preference(device, preference):
+                markers.append("remembered")
+
         usb_id = f" [{device.usb_id}]" if device.usb_id else ""
+        marker_text = f" ({', '.join(markers)})" if markers else ""
         print(
-            f" {marker} {device.device:<18} "
-            f"{device.display_name}{usb_id}"
+            f"  {device.device:<18} "
+            f"{device.display_name}{usb_id}{marker_text}"
         )
 
-    print("\n* tested BetaBrite USB adapter")
+
+def print_status(port: str) -> int:
+    settings = load_settings()
+    preference = settings.preferred_device
+    diagnostic = diagnose_device(port, settings=settings)
+
+    print("\nBetaBrite device status:")
+    print(f"  state:      {diagnostic.state.upper()}")
+    print(f"  settings:   {settings_path()}")
+
+    if preference is None:
+        print("  remembered: none")
+    else:
+        identity = preference.usb_id or preference.device or "unknown"
+        serial = f" / serial {preference.serial_number}" if preference.serial_number else ""
+        print(f"  remembered: {preference.label} [{identity}]{serial}")
+
+    if diagnostic.port:
+        print(f"  port:       {diagnostic.port}")
+    if diagnostic.source:
+        print(f"  selected:   {diagnostic.source}")
+    print(f"  detail:     {diagnostic.message}")
+    return 0 if diagnostic.ready else 1
 
 
 def main(argv=None):
@@ -127,6 +188,32 @@ def main(argv=None):
 
     if args.list_ports:
         print_ports()
+        return 0
+
+    if args.list_all_ports:
+        print_ports(include_system=True)
+        return 0
+
+    if args.status:
+        return print_status(args.port)
+
+    if args.remember_port is not None:
+        try:
+            selection = remember_port(args.remember_port)
+        except Exception as exc:
+            print(f"BetaBrite error: {exc}", file=sys.stderr)
+            return 1
+        device_name = (
+            selection.device.display_name
+            if selection.device is not None
+            else selection.port
+        )
+        print(f"Remembered {device_name} on {selection.port}.")
+        return 0
+
+    if args.forget_port:
+        forget_port()
+        print("Forgot the remembered BetaBrite serial adapter.")
         return 0
 
     if args.list_colors:
