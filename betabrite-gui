@@ -5,159 +5,33 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import Gtk
 
-from alphasign import (
-    Sign,
-    SignType,
-    Packet,
-    WriteText,
-    DisplayMode,
-    DisplayPosition,
-    SpecialMode,
-    Color,
-    color,
-    speed,
-    CTRL_FLASH_ON,
-    CTRL_FLASH_OFF,
-    CTRL_WIDE_ON,
-    CTRL_WIDE_OFF,
+from betabrite_controller.controller import (
+    BetaBriteController,
+    COLORS as BACKEND_COLORS,
+    MODES as BACKEND_MODES,
+    SPECIALS as BACKEND_SPECIALS,
+    DEFAULT_PORT,
 )
 
-PORT = "/dev/betabrite"
+PORT = DEFAULT_PORT
 
 COLORS = {
-    "Auto": Color.AUTO,
-    "Red": Color.RED,
-    "Green": Color.GREEN,
-    "Amber": Color.AMBER,
-    "Yellow": Color.YELLOW,
-    "Orange": Color.ORANGE,
-    "Brown": Color.BROWN,
-    "Dim Red": Color.DIM_RED,
-    "Dim Green": Color.DIM_GREEN,
-    "Rainbow 1": Color.RAINBOW1,
-    "Rainbow 2": Color.RAINBOW2,
-    "Mix": Color.MIX,
+    name.replace("-", " ").title(): name
+    for name in BACKEND_COLORS
 }
 
 MODES = {
-    "Rotate": DisplayMode.ROTATE,
-    "Hold": DisplayMode.HOLD,
-    "Scroll": DisplayMode.SCROLL,
-    "Compressed Rotate": DisplayMode.COMPRESSED_ROTATE,
-    "Roll Left": DisplayMode.ROLL_LEFT,
-    "Roll Right": DisplayMode.ROLL_RIGHT,
-    "Roll Up": DisplayMode.ROLL_UP,
-    "Roll Down": DisplayMode.ROLL_DOWN,
-    "Roll In": DisplayMode.ROLL_IN,
-    "Roll Out": DisplayMode.ROLL_OUT,
-    "Wipe Left": DisplayMode.WIPE_LEFT,
-    "Wipe Right": DisplayMode.WIPE_RIGHT,
-    "Wipe Up": DisplayMode.WIPE_UP,
-    "Wipe Down": DisplayMode.WIPE_DOWN,
-    "Wipe In": DisplayMode.WIPE_IN,
-    "Wipe Out": DisplayMode.WIPE_OUT,
-    "Automode": DisplayMode.AUTOMODE,
+    name.replace("-", " ").title(): name
+    for name in BACKEND_MODES
 }
 
 SPECIALS = {
     "None": None,
-    "Twinkle": SpecialMode.TWINKLE,
-    "Sparkle": SpecialMode.SPARKLE,
-    "Snow": SpecialMode.SNOW,
-    "Interlock": SpecialMode.INTERLOCK,
-    "Switch": SpecialMode.SWITCH,
-    "Spray": SpecialMode.SPRAY,
-    "Starburst": SpecialMode.STARBURST,
-    "Welcome": SpecialMode.WELCOME,
-    "Slot Machine": SpecialMode.SLOT_MACHINE,
-    "News Flash": SpecialMode.NEWS_FLASH,
-    "Trumpet": SpecialMode.TRUMPET,
-    "Cycle Colors": SpecialMode.CYCLE_COLORS,
-    "Thank You": SpecialMode.THANK_YOU,
-    "No Smoking": SpecialMode.NO_SMOKING,
-    "Don't Drink & Drive": SpecialMode.DONT_DRINK_DRIVE,
-    "Running Animal": SpecialMode.RUNNING_ANIMAL,
-    "Fireworks": SpecialMode.FIREWORKS,
-    "Turbocar": SpecialMode.TURBOCAR,
-    "Cherry Bomb": SpecialMode.CHERRY_BOMB,
+    **{
+        name.replace("-", " ").title(): name
+        for name in BACKEND_SPECIALS
+    },
 }
-
-
-def send_to_sign(
-    message,
-    selected_color,
-    selected_mode,
-    selected_special,
-    selected_speed,
-    flash,
-    wide,
-):
-    content = b""
-
-    content += color(COLORS[selected_color])
-    content += speed(selected_speed)
-
-    if wide:
-        content += CTRL_WIDE_ON
-
-    if flash:
-        content += CTRL_FLASH_ON
-
-    content += message.encode("ascii", errors="replace")
-
-    if flash:
-        content += CTRL_FLASH_OFF
-
-    if wide:
-        content += CTRL_WIDE_OFF
-
-    special = SPECIALS[selected_special]
-
-    if special is not None:
-        display_mode = DisplayMode.SPECIAL
-        special_mode = special
-    else:
-        display_mode = MODES[selected_mode]
-        special_mode = None
-
-    sign = Sign(
-        sign_type=SignType.ALL,
-        address="00",
-    )
-
-    try:
-        sign.open(
-            PORT,
-            baudrate=9600,
-            bytesize=7,
-            parity="E",
-            stopbits=1,
-            timeout=1,
-            dtr=False,
-        )
-
-        packet = Packet(
-            type_code=b"Z",
-            address="00",
-        )
-
-        packet.add(
-            WriteText(
-                content,
-                label="A",
-                position=DisplayPosition.FILL,
-                mode=display_mode,
-                special_mode=special_mode,
-            )
-        )
-
-        sign.send(packet)
-
-    finally:
-        try:
-            sign.close()
-        except Exception:
-            pass
 
 
 class BetaBriteWindow(Gtk.ApplicationWindow):
@@ -421,9 +295,11 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         return item.get_string()
 
     def refresh_connection(self):
-        from pathlib import Path
+        controller = BetaBriteController(
+            port=PORT
+        )
 
-        if Path(PORT).exists():
+        if controller.connected:
             self.connection.set_markup(
                 '<span weight="bold">● CONNECTED</span>'
             )
@@ -495,12 +371,16 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         self.status.set_text("Sending...")
 
         try:
-            send_to_sign(
+            controller = BetaBriteController(
+                port=PORT
+            )
+
+            controller.send(
                 message=message,
-                selected_color=self.selected_color,
-                selected_mode=selected_mode,
-                selected_special=selected_special,
-                selected_speed=self.selected_speed,
+                color_name=COLORS[self.selected_color],
+                mode_name=MODES[selected_mode],
+                special_name=SPECIALS[selected_special],
+                speed_level=self.selected_speed,
                 flash=self.flash.get_active(),
                 wide=self.wide.get_active(),
             )
