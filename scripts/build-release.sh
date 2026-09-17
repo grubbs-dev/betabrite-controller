@@ -21,6 +21,7 @@ copy_exec() {
 copy_file README.md
 copy_file CHANGELOG.md
 copy_file requirements.txt
+copy_file pyproject.toml
 copy_file INSTALL-BETABRITE.desktop
 copy_exec install.sh
 copy_exec uninstall.sh

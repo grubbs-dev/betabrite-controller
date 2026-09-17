@@ -2,83 +2,119 @@
 
 **Legacy sign. Modern control.**
 
-A small Linux controller for classic Alpha/BetaBrite LED signs, with both a GTK4 desktop app and a command-line interface.
+BetaBrite Controller is a controller for classic Alpha/BetaBrite LED signs. The controller core and command-line interface are designed to work on Windows, macOS, and Linux. The current GTK4 desktop GUI remains Linux/Fedora-specific while the portable desktop application is being built.
 
 [![CI](https://github.com/grubbs-dev/betabrite-controller/actions/workflows/ci.yml/badge.svg)](https://github.com/grubbs-dev/betabrite-controller/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/grubbs-dev/betabrite-controller?display_name=tag)](https://github.com/grubbs-dev/betabrite-controller/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Fedora%20Linux-blue)](#requirements)
+[![Core platforms](https://img.shields.io/badge/core-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#platform-support)
 
 ## What it does
 
-BetaBrite Controller sends messages, colors, display modes, speeds, formatting, and built-in special effects to supported Alpha/BetaBrite serial LED signs.
+BetaBrite Controller sends custom messages, colors, display modes, speeds, formatting, and built-in special effects to supported Alpha/BetaBrite serial LED signs.
 
-It includes:
+The project currently includes:
 
-- GTK4 desktop controller with live sign connection status
-- Command-line controller for scripts and quick messages
-- Automatic `/dev/betabrite` device naming through udev
-- Fedora installer that configures dependencies, permissions, launchers, and the desktop entry
-- Hardware setup screen with the tested RJ12 wiring reference
-- Installation health checks and unit tests
+- Cross-platform serial discovery for Windows, macOS, and Linux
+- Automatic detection of the physically tested PL2303GT USB serial adapter
+- Command-line controller for messages, effects, automation, and diagnostics
+- GTK4 desktop controller for Fedora Linux
+- Fedora one-click installer with udev and serial-permission setup
+- Hardware and wiring documentation for the tested sign/adapter combination
+- Automated tests across Windows, macOS, and Linux
+
+## Platform support
+
+| Component | Windows | macOS | Linux |
+| --- | :---: | :---: | :---: |
+| Controller backend | ✓ | ✓ | ✓ |
+| Serial auto-discovery | ✓ | ✓ | ✓ |
+| Command-line interface | ✓ | ✓ | ✓ |
+| Current GTK4 GUI | — | — | ✓ |
+| Current one-click installer | — | — | Fedora |
+
+The next major product milestone is a portable desktop GUI and native installer so normal users do not need Python, Git, or a terminal.
 
 ## Tested hardware
 
-The current release is physically tested with:
+The physically tested configuration is:
 
 - **Sign:** Adaptive Micro Systems BetaBrite 213C-1, Series B
-- **Adapter:** DSD TECH SH-RJ12C using a Prolific PL2303GT USB serial chipset
+- **Adapter:** DSD TECH SH-RJ12C
+- **USB chipset:** Prolific PL2303GT (`067b:23a3`)
 - **Serial settings:** 9600 baud, 7 data bits, even parity, 1 stop bit
-- **Operating system:** Fedora Linux
 
-Other Alpha/BetaBrite models may work with the same protocol, but they are not claimed as tested unless listed here.
+Other compatible Alpha/BetaBrite signs and USB serial adapters may work, but should be treated as unverified until physically tested.
 
-See [Hardware setup](docs/hardware.md) before rewiring any cable. Wire colors are not a universal serial standard.
+See [Hardware setup](docs/hardware.md) before changing wiring.
+
+## Serial discovery
+
+By default the controller uses:
+
+```text
+auto
+```
+
+Automatic selection prefers the tested Prolific PL2303GT adapter. If that adapter is not present and exactly one other USB serial adapter is connected, that device is selected.
+
+List detected ports:
+
+```bash
+betabrite --list-ports
+```
+
+Example devices:
+
+```text
+Windows   COM4
+macOS     /dev/cu.usbserial-XXXX
+Linux     /dev/ttyUSB0
+```
+
+You can always select a port manually:
+
+```bash
+betabrite "HELLO WORLD" --port COM4
+betabrite "HELLO WORLD" --port /dev/cu.usbserial-XXXX
+betabrite "HELLO WORLD" --port /dev/ttyUSB0
+```
 
 ## Install
 
-### Recommended: latest release
+### Fedora desktop application
+
+The current complete GUI installer supports Fedora Linux.
 
 1. Open the [latest release](https://github.com/grubbs-dev/betabrite-controller/releases/latest).
-2. Download the Linux `.tar.gz` or `.zip` archive.
-3. Extract it.
-4. Open a terminal in the extracted folder and run:
+2. Download and extract the release archive.
+3. Open a terminal in the extracted folder.
+4. Run:
 
 ```bash
 bash install.sh
 ```
 
-The installer will:
+The installer configures the GTK4 application, isolated Python runtime, desktop launcher, tested USB adapter rule, and serial permissions.
 
-- install Fedora system dependencies with `dnf`
-- create an isolated Python environment under `/opt/betabrite-controller`
-- install the Alpha sign protocol dependency
-- create the `betabrite` and `betabrite-gui` launchers
-- install the desktop application entry
-- install the udev rule for the tested USB adapter
-- add the current user to `dialout` when required
-- run an installation health check
+### Cross-platform controller core
 
-If the installer says a logout is required, log out of Fedora and back in once so the new serial-device group membership takes effect.
-
-### Install from source
+For development, testing, and CLI use on Windows, macOS, or Linux:
 
 ```bash
-git clone https://github.com/grubbs-dev/betabrite-controller.git
-cd betabrite-controller
-bash install.sh
+python -m pip install .
 ```
+
+After installation:
+
+```bash
+betabrite --version
+betabrite --list-ports
+betabrite "HELLO WORLD"
+```
+
+This Python-based installation is an interim developer/advanced-user path. The planned portable GUI release will bundle its runtime and dependencies.
 
 ## Use
-
-### Desktop app
-
-Open the application launcher and search for **BetaBrite Controller**, or run:
-
-```bash
-betabrite-gui
-```
-
-The GUI provides message entry, colors, motion modes, special effects, speed, flash/wide text controls, quick-transmit presets, connection monitoring, and a hardware setup screen.
 
 ### Command line
 
@@ -106,85 +142,81 @@ Run a built-in sign effect:
 betabrite --special fireworks
 ```
 
+Inspect serial devices:
+
+```bash
+betabrite --list-ports
+```
+
 See all options:
 
 ```bash
 betabrite --help
 ```
 
-List supported values:
+### Fedora desktop app
+
+Open the application launcher and search for **BetaBrite Controller**, or run:
 
 ```bash
-betabrite --list-colors
-betabrite --list-modes
-betabrite --list-special
+betabrite-gui
 ```
+
+The current GUI provides message entry, colors, motion modes, special effects, speed, flash/wide text controls, quick-transmit presets, connection monitoring, and hardware setup.
 
 ## Troubleshooting
 
-If the app reports **SIGN OFFLINE**, start with:
+Start with:
 
 ```bash
-ls -l /dev/betabrite
+betabrite --list-ports
 ```
 
-If the device is missing, see [Troubleshooting](docs/troubleshooting.md) for USB detection, udev, `dialout`, and serial-device checks.
+If the adapter appears but automatic selection is ambiguous, pass the correct device explicitly with `--port`.
 
-## Uninstall
-
-From a copy of the repository or release archive:
-
-```bash
-bash uninstall.sh
-```
-
-This removes the application, command launchers, desktop entry, and udev rule. It does not remove Fedora packages that may also be used by other applications.
+See [Troubleshooting](docs/troubleshooting.md) for platform-specific checks.
 
 ## Development
 
-Run the unit tests from the repository root:
+Create a virtual environment and install the project:
 
 ```bash
-bash test.sh
+python -m venv .venv
+python -m pip install -e .
 ```
 
-For a clean development environment:
+Activate the environment using the command appropriate for your operating system, then run:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m unittest discover -s tests -p 'test_*.py' -v
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-Release archives are built with:
-
-```bash
-bash scripts/build-release.sh v1.0.0
-```
-
-See [Contributing](CONTRIBUTING.md) for the development workflow.
+GitHub CI runs the controller core on Windows, macOS, and Linux.
 
 ## Project layout
 
 ```text
 betabrite-controller/
-├── betabrite                     # CLI entry point
-├── betabrite-gui                 # GTK4 desktop application
-├── betabrite_controller/         # controller backend
-├── packaging/                    # desktop entry and udev rule
-├── tests/                        # unit tests
-├── docs/                         # hardware and troubleshooting docs
-├── scripts/                      # release tooling
-├── install.sh                    # Fedora installer
-└── uninstall.sh                  # uninstaller
+├── betabrite                     # source-checkout CLI shim
+├── betabrite-gui                 # current GTK4 desktop application
+├── betabrite_controller/
+│   ├── controller.py             # sign protocol/controller
+│   ├── devices.py                # cross-platform serial discovery
+│   └── cli.py                    # portable command-line interface
+├── packaging/                    # current Linux desktop/udev assets
+├── tests/
+├── docs/
+├── scripts/
+├── pyproject.toml
+├── install.sh                    # current Fedora GUI installer
+└── uninstall.sh
 ```
 
 ## Releases
 
-Pushing a version tag such as `v1.0.0` runs the release workflow. It executes the test suite, builds `.tar.gz` and `.zip` distributions, generates SHA-256 checksums, and publishes a GitHub Release.
-
 Version history is tracked in [CHANGELOG.md](CHANGELOG.md).
+
+The current release pipeline publishes source archives and checksums. Native Windows, macOS, and portable Linux application artifacts will be added with the portable GUI packaging phase.
 
 ## License
 

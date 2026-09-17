@@ -9,10 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  core:
+    name: Core / ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.12", "3.13"]
 
     steps:
@@ -25,14 +28,32 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install Python dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install project
+        run: python -m pip install .
+
+      - name: Compile Python sources
+        run: |
+          python -m compileall -q betabrite_controller tests
+          python -m py_compile betabrite betabrite-gui
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Smoke-test CLI
+        run: |
+          betabrite --version
+          betabrite --list-ports
+
+  linux-integration:
+    name: Linux installer syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Check shell syntax
         run: bash -n install.sh uninstall.sh test.sh scripts/build-release.sh
-
-      - name: Compile Python sources
-        run: python -m py_compile betabrite betabrite-gui betabrite_controller/*.py tests/*.py
-
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -p 'test_*.py' -v

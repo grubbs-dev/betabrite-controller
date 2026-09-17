@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "betabrite-controller"
+version = "1.1.0"
+description = "Cross-platform controller core for classic Alpha/BetaBrite LED signs"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Grubbs" }
+]
+dependencies = [
+  "alphasignpy==0.1.1",
+  "pyserial>=3.5,<4",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Homepage = "https://github.com/grubbs-dev/betabrite-controller"
+Repository = "https://github.com/grubbs-dev/betabrite-controller"
+Issues = "https://github.com/grubbs-dev/betabrite-controller/issues"
+
+[project.scripts]
+betabrite = "betabrite_controller.cli:main"
+
+[tool.setuptools]
+packages = ["betabrite_controller"]
