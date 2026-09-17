@@ -19,6 +19,7 @@ The project currently includes:
 - Command-line controller for messages, effects, automation, and diagnostics
 - Persistent per-user USB adapter selection with stable USB identity matching
 - Active serial connection checks with customer-friendly error states
+- Portable PySide6 / Qt desktop foundation for Windows, macOS, and Linux
 - GTK4 desktop controller for Fedora Linux using the same connection-state backend
 - Fedora one-click installer with udev and serial-permission setup
 - Hardware and wiring documentation for the tested sign/adapter combination
@@ -31,10 +32,11 @@ The project currently includes:
 | Controller backend | ✓ | ✓ | ✓ |
 | Serial auto-discovery | ✓ | ✓ | ✓ |
 | Command-line interface | ✓ | ✓ | ✓ |
+| Portable Qt GUI foundation | CI | CI | CI |
 | Current GTK4 GUI | — | — | ✓ |
 | Current one-click installer | — | — | Fedora |
 
-The next major product milestone is a portable desktop GUI and native installer so normal users do not need Python, Git, or a terminal.
+The portable Qt GUI is now under active 1.2 development. Its foundation is smoke-tested on all three desktop operating systems; the Fedora GTK4 app remains the physically validated reference UI until feature parity and native packaging are complete.
 
 ## Tested hardware
 
@@ -114,7 +116,29 @@ betabrite --list-ports
 betabrite "HELLO WORLD"
 ```
 
-This Python-based installation is an interim developer/advanced-user path. Tagged releases also publish a standard wheel and Python source distribution. The planned portable GUI release will bundle its runtime and dependencies so normal desktop users do not need Python or pip.
+This Python-based installation is an interim developer/advanced-user path. Tagged releases also publish a standard wheel and Python source distribution. The portable GUI release will bundle its runtime and dependencies so normal desktop users do not need Python or pip.
+
+### Portable desktop development
+
+Install the Qt desktop extra:
+
+```bash
+python -m pip install -e ".[desktop]"
+```
+
+Verify the runtime without opening a window:
+
+```bash
+betabrite-desktop --smoke-test
+```
+
+Launch the portable desktop foundation:
+
+```bash
+betabrite-desktop
+```
+
+See [Portable desktop application](docs/portable-gui.md) for architecture and migration status.
 
 ## Use
 
@@ -175,6 +199,16 @@ See all options:
 betabrite --help
 ```
 
+### Portable desktop foundation
+
+During 1.2 development, launch the cross-platform Qt application with:
+
+```bash
+betabrite-desktop
+```
+
+The current foundation provides real adapter discovery, active connection state, and remembered-adapter controls. Message composition and full GTK feature parity are the next portable GUI milestone.
+
 ### Fedora desktop app
 
 Open the application launcher and search for **BetaBrite Controller**, or run:
@@ -223,6 +257,8 @@ betabrite-controller/
 ├── betabrite_controller/
 │   ├── controller.py             # sign protocol/controller
 │   ├── devices.py                # cross-platform serial discovery
+│   ├── desktop.py                # portable PySide6 desktop entry point
+│   ├── desktop_model.py          # toolkit-independent desktop view model
 │   └── cli.py                    # portable command-line interface
 ├── packaging/                    # current Linux desktop/udev assets
 ├── tests/
