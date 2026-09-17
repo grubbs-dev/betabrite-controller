@@ -56,6 +56,10 @@ $SUDO "$VENV_DIR/bin/python" -m pip install \
 $SUDO "$VENV_DIR/bin/python" -m pip install \
     -r "$SCRIPT_DIR/requirements.txt"
 
+echo "==> Removing legacy launchers"
+
+$SUDO rm -f     /usr/local/sbin/betabrite     /usr/local/sbin/betabrite-gui
+
 echo "==> Installing CLI launcher"
 
 $SUDO tee "$BIN_DIR/betabrite" >/dev/null <<EOF
