@@ -3,8 +3,14 @@
 import gi
 gi.require_version("Gtk", "4.0")
 
-from gi.repository import Gtk
+from gi.repository import Gtk, Gdk, GLib
 
+from betabrite_controller import (
+    __app_name__,
+    __version__,
+    __author__,
+    __tagline__,
+)
 from betabrite_controller.controller import (
     BetaBriteController,
     COLORS as BACKEND_COLORS,
@@ -34,23 +40,122 @@ SPECIALS = {
 }
 
 
-class BetaBriteWindow(Gtk.ApplicationWindow):
-    def __init__(self, app):
+CSS = r"""
+window {
+    background: #111318;
+}
+
+.main-panel {
+    background: #111318;
+}
+
+.brand-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.brand-subtitle {
+    opacity: 0.72;
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+.author-label {
+    opacity: 0.58;
+    font-size: 12px;
+}
+
+.section-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    opacity: 0.75;
+}
+
+.connection-online {
+    background: alpha(@success_color, 0.16);
+    color: @success_color;
+    border: 1px solid alpha(@success_color, 0.50);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 800;
+}
+
+.connection-offline {
+    background: alpha(@error_color, 0.16);
+    color: @error_color;
+    border: 1px solid alpha(@error_color, 0.50);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 800;
+}
+
+.message-entry {
+    font-size: 18px;
+    padding: 10px;
+}
+
+.send-button {
+    font-size: 16px;
+    font-weight: 800;
+    min-height: 48px;
+}
+
+.footer-status {
+    opacity: 0.75;
+}
+
+.hardware-card {
+    background: alpha(@theme_fg_color, 0.045);
+    border: 1px solid alpha(@theme_fg_color, 0.12);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.pin-number {
+    font-weight: 800;
+    font-size: 16px;
+}
+
+.pin-function {
+    opacity: 0.72;
+}
+
+.wiring-title {
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.dialog-brand {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+"""
+
+
+def section_label(text):
+    label = Gtk.Label(label=text)
+    label.set_xalign(0)
+    label.add_css_class("section-title")
+    return label
+
+
+class HardwareSetupWindow(Gtk.Window):
+    def __init__(self, parent):
         super().__init__(
-            application=app,
-            title="BetaBrite Controller",
+            title="BetaBrite Hardware Setup",
+            transient_for=parent,
+            modal=True,
         )
 
-        self.set_default_size(820, 720)
-
-        self.selected_color = "Auto"
-        self.selected_speed = 3
-        self.color_buttons = {}
-        self.speed_buttons = {}
+        self.parent_window = parent
+        self.set_default_size(720, 650)
 
         outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=16,
+            spacing=18,
         )
         outer.set_margin_top(24)
         outer.set_margin_bottom(24)
@@ -58,63 +163,353 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         outer.set_margin_end(28)
         self.set_child(outer)
 
-        # Header
-        header = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=12,
-        )
-
-        header_text = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            spacing=2,
-        )
-        header_text.set_hexpand(True)
-
-        title = Gtk.Label()
-        title.set_markup(
-            '<span size="xx-large" weight="bold">'
-            'BetaBrite Controller'
-            '</span>'
-        )
+        title = Gtk.Label(label="HARDWARE // SETUP")
         title.set_xalign(0)
+        title.add_css_class("dialog-brand")
+        outer.append(title)
 
         subtitle = Gtk.Label(
-            label="Alpha / BetaBrite 213C"
+            label="Known-good configuration for the tested BetaBrite hardware"
         )
         subtitle.set_xalign(0)
+        subtitle.set_wrap(True)
+        outer.append(subtitle)
 
-        header_text.append(title)
-        header_text.append(subtitle)
-        header.append(header_text)
+        info = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=5,
+        )
+        info.add_css_class("hardware-card")
 
-        self.connection = Gtk.Label()
-        header.append(self.connection)
+        for text in (
+            "SIGN     Adaptive Micro Systems BetaBrite 213C-1 // Series B",
+            "ADAPTER  DSD TECH SH-RJ12C // Prolific PL2303GT",
+            "SERIAL   9600 baud // 7 data bits // even parity // 1 stop bit",
+            f"DEVICE   {PORT}",
+        ):
+            row = Gtk.Label(label=text)
+            row.set_xalign(0)
+            row.set_selectable(True)
+            info.append(row)
 
-        outer.append(header)
+        outer.append(info)
+
+        outer.append(section_label("RJ12 WIRING"))
+
+        wiring_help = Gtk.Label(
+            label=(
+                "Wire the BetaBrite-side RJ12 connector exactly as shown "
+                "for the tested DSD TECH adapter."
+            )
+        )
+        wiring_help.set_xalign(0)
+        wiring_help.set_wrap(True)
+        outer.append(wiring_help)
+
+        wiring = Gtk.Grid(
+            column_spacing=18,
+            row_spacing=10,
+        )
+        wiring.set_column_homogeneous(False)
+        wiring.add_css_class("hardware-card")
+
+        headers = ("PIN", "WIRE", "FUNCTION")
+        for column, text in enumerate(headers):
+            label = Gtk.Label(label=text)
+            label.set_xalign(0)
+            label.add_css_class("section-title")
+            wiring.attach(label, column, 0, 1, 1)
+
+        rows = (
+            ("1", "YELLOW", "GND"),
+            ("2", "EMPTY", "—"),
+            ("3", "RED", "Adapter TX → Sign RX"),
+            ("4", "GREEN", "Adapter RX ← Sign TX"),
+            ("5", "EMPTY", "—"),
+            ("6", "EMPTY", "—"),
+        )
+
+        for row_index, (pin, wire, function) in enumerate(rows, start=1):
+            pin_label = Gtk.Label(label=pin)
+            pin_label.set_xalign(0)
+            pin_label.add_css_class("pin-number")
+
+            wire_label = Gtk.Label(label=wire)
+            wire_label.set_xalign(0)
+
+            function_label = Gtk.Label(label=function)
+            function_label.set_xalign(0)
+            function_label.add_css_class("pin-function")
+
+            wiring.attach(pin_label, 0, row_index, 1, 1)
+            wiring.attach(wire_label, 1, row_index, 1, 1)
+            wiring.attach(function_label, 2, row_index, 1, 1)
+
+        outer.append(wiring)
+
+        wire_order = Gtk.Label(
+            label="YELLOW  —  EMPTY  —  RED  —  GREEN  —  EMPTY  —  EMPTY"
+        )
+        wire_order.set_xalign(0)
+        wire_order.set_selectable(True)
+        wire_order.set_wrap(True)
+        outer.append(wire_order)
+
+        warning = Gtk.Label(
+            label=(
+                "Wire colors are not a universal RS-232 standard. "
+                "This pinout is specifically the physically tested "
+                "DSD TECH SH-RJ12C / PL2303GT and BetaBrite 213C combination."
+            )
+        )
+        warning.set_xalign(0)
+        warning.set_wrap(True)
+        outer.append(warning)
 
         separator = Gtk.Separator()
         outer.append(separator)
 
+        self.device_status = Gtk.Label()
+        self.device_status.set_xalign(0)
+        outer.append(self.device_status)
+
+        buttons = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+        )
+
+        refresh = Gtk.Button(label="REFRESH DEVICE")
+        refresh.set_hexpand(True)
+        refresh.connect("clicked", self.on_refresh)
+
+        test = Gtk.Button(label="TEST SIGN")
+        test.set_hexpand(True)
+        test.add_css_class("suggested-action")
+        test.connect("clicked", self.on_test)
+        self.test_button = test
+
+        close = Gtk.Button(label="CLOSE")
+        close.connect("clicked", lambda *_: self.close())
+
+        buttons.append(refresh)
+        buttons.append(test)
+        buttons.append(close)
+        outer.append(buttons)
+
+        self.refresh_device()
+
+    def refresh_device(self):
+        controller = BetaBriteController(port=PORT)
+
+        if controller.connected:
+            self.device_status.set_markup(
+                f'<span weight="bold">● DEVICE DETECTED</span>   {PORT}'
+            )
+            self.test_button.set_sensitive(True)
+        else:
+            self.device_status.set_markup(
+                f'<span weight="bold">● DEVICE NOT DETECTED</span>   {PORT}'
+            )
+            self.test_button.set_sensitive(False)
+
+    def on_refresh(self, *_):
+        self.refresh_device()
+        self.parent_window.refresh_connection()
+
+    def on_test(self, *_):
+        self.refresh_device()
+
+        if not self.test_button.get_sensitive():
+            return
+
+        self.test_button.set_sensitive(False)
+        self.device_status.set_text("Transmitting hardware test...")
+
+        try:
+            controller = BetaBriteController(port=PORT)
+            controller.send(
+                message="BETABRITE // READY",
+                color_name="green",
+                mode_name="hold",
+                speed_level=3,
+            )
+
+            self.device_status.set_text(
+                'Test passed — sent "BETABRITE // READY"'
+            )
+            self.parent_window.status.set_text(
+                "Hardware test transmitted successfully."
+            )
+
+        except Exception as exc:
+            self.device_status.set_text(
+                f"Hardware test failed: {exc}"
+            )
+            self.parent_window.status.set_text(
+                f"Hardware test failed: {exc}"
+            )
+
+        finally:
+            self.refresh_device()
+            self.parent_window.refresh_connection()
+
+
+class AboutWindow(Gtk.Window):
+    def __init__(self, parent):
+        super().__init__(
+            title=f"About {__app_name__}",
+            transient_for=parent,
+            modal=True,
+        )
+
+        self.set_default_size(480, 380)
+
+        box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=14,
+        )
+        box.set_margin_top(32)
+        box.set_margin_bottom(32)
+        box.set_margin_start(36)
+        box.set_margin_end(36)
+        self.set_child(box)
+
+        title = Gtk.Label(label="BETABRITE // CONTROLLER")
+        title.add_css_class("dialog-brand")
+        box.append(title)
+
+        tagline = Gtk.Label(label=__tagline__.upper())
+        tagline.add_css_class("brand-subtitle")
+        box.append(tagline)
+
+        box.append(Gtk.Separator())
+
+        version = Gtk.Label(label=f"Version {__version__}")
+        box.append(version)
+
+        author = Gtk.Label()
+        author.set_markup(
+            f'<span weight="bold">Created by {__author__}</span>'
+        )
+        box.append(author)
+
+        description = Gtk.Label(
+            label=(
+                "A modern Linux controller for classic "
+                "Alpha / BetaBrite LED displays."
+            )
+        )
+        description.set_wrap(True)
+        description.set_justify(Gtk.Justification.CENTER)
+        box.append(description)
+
+        technical = Gtk.Label(
+            label=(
+                "GTK4 Desktop Controller\n"
+                "Alpha Sign Protocol\n"
+                "9600 // 7E1 // RS-232"
+            )
+        )
+        technical.set_justify(Gtk.Justification.CENTER)
+        box.append(technical)
+
+        close = Gtk.Button(label="CLOSE")
+        close.connect("clicked", lambda *_: self.close())
+        box.append(close)
+
+
+class BetaBriteWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(
+            application=app,
+            title=f"{__app_name__} // {__author__}",
+        )
+
+        self.set_default_size(900, 760)
+
+        self.selected_color = "Auto"
+        self.selected_speed = 3
+        self.color_buttons = {}
+        self.speed_buttons = {}
+        self.hardware_window = None
+        self.about_window = None
+
+        outer = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=16,
+        )
+        outer.add_css_class("main-panel")
+        outer.set_margin_top(24)
+        outer.set_margin_bottom(24)
+        outer.set_margin_start(28)
+        outer.set_margin_end(28)
+        self.set_child(outer)
+
+        # ----------------------------------------------------
+        # Brand
+        # ----------------------------------------------------
+
+        header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=18,
+        )
+
+        header_text = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=3,
+        )
+        header_text.set_hexpand(True)
+
+        title = Gtk.Label(label="BETABRITE // CONTROLLER")
+        title.set_xalign(0)
+        title.add_css_class("brand-title")
+
+        subtitle = Gtk.Label(
+            label=__tagline__.upper()
+        )
+        subtitle.set_xalign(0)
+        subtitle.add_css_class("brand-subtitle")
+
+        author = Gtk.Label(
+            label=f"Created by {__author__}  //  v{__version__}"
+        )
+        author.set_xalign(0)
+        author.add_css_class("author-label")
+
+        header_text.append(title)
+        header_text.append(subtitle)
+        header_text.append(author)
+
+        self.connection = Gtk.Label()
+        self.connection.set_valign(Gtk.Align.CENTER)
+
+        header.append(header_text)
+        header.append(self.connection)
+        outer.append(header)
+
+        outer.append(Gtk.Separator())
+
+        # ----------------------------------------------------
         # Message
-        label = Gtk.Label()
-        label.set_markup('<b>MESSAGE</b>')
-        label.set_xalign(0)
-        outer.append(label)
+        # ----------------------------------------------------
+
+        outer.append(section_label("MESSAGE"))
 
         self.message = Gtk.Entry()
         self.message.set_placeholder_text(
             "Type a message for the sign..."
         )
         self.message.set_text("BRIEF IN PROGRESS")
-        self.message.set_size_request(-1, 52)
+        self.message.set_size_request(-1, 54)
+        self.message.add_css_class("message-entry")
         self.message.connect("activate", self.on_send)
         outer.append(self.message)
 
-        # Colors
-        label = Gtk.Label()
-        label.set_markup('<b>COLOR</b>')
-        label.set_xalign(0)
-        outer.append(label)
+        # ----------------------------------------------------
+        # Color
+        # ----------------------------------------------------
+
+        outer.append(section_label("COLOR"))
 
         color_grid = Gtk.FlowBox()
         color_grid.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -123,7 +518,7 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         color_grid.set_max_children_per_line(6)
 
         for name in COLORS:
-            button = Gtk.ToggleButton(label=name)
+            button = Gtk.ToggleButton(label=name.upper())
             button.connect("clicked", self.on_color, name)
             self.color_buttons[name] = button
             color_grid.insert(button, -1)
@@ -131,7 +526,10 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         self.color_buttons["Auto"].set_active(True)
         outer.append(color_grid)
 
-        # Mode + special
+        # ----------------------------------------------------
+        # Motion / effect
+        # ----------------------------------------------------
+
         selectors = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=16,
@@ -142,16 +540,11 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             spacing=6,
         )
         mode_box.set_hexpand(True)
-
-        mode_label = Gtk.Label()
-        mode_label.set_markup('<b>DISPLAY MODE</b>')
-        mode_label.set_xalign(0)
+        mode_box.append(section_label("DISPLAY MODE"))
 
         self.mode = Gtk.DropDown.new_from_strings(
             list(MODES.keys())
         )
-
-        mode_box.append(mode_label)
         mode_box.append(self.mode)
 
         special_box = Gtk.Box(
@@ -159,27 +552,22 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             spacing=6,
         )
         special_box.set_hexpand(True)
-
-        special_label = Gtk.Label()
-        special_label.set_markup('<b>SPECIAL EFFECT</b>')
-        special_label.set_xalign(0)
+        special_box.append(section_label("SPECIAL EFFECT"))
 
         self.special = Gtk.DropDown.new_from_strings(
             list(SPECIALS.keys())
         )
-
-        special_box.append(special_label)
         special_box.append(self.special)
 
         selectors.append(mode_box)
         selectors.append(special_box)
         outer.append(selectors)
 
+        # ----------------------------------------------------
         # Speed
-        label = Gtk.Label()
-        label.set_markup('<b>SPEED</b>')
-        label.set_xalign(0)
-        outer.append(label)
+        # ----------------------------------------------------
+
+        outer.append(section_label("SPEED"))
 
         speed_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -201,31 +589,37 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         outer.append(speed_row)
 
         speed_help = Gtk.Label(
-            label="1 = slowest     •     5 = fastest"
+            label="SLOWEST  1   •   2   •   3   •   4   •   5  FASTEST"
         )
         speed_help.set_xalign(0)
+        speed_help.add_css_class("author-label")
         outer.append(speed_help)
 
+        # ----------------------------------------------------
         # Formatting
+        # ----------------------------------------------------
+
         options = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=24,
         )
 
-        self.flash = Gtk.CheckButton(label="Flash")
-        self.wide = Gtk.CheckButton(label="Wide Text")
+        self.flash = Gtk.CheckButton(label="FLASH")
+        self.wide = Gtk.CheckButton(label="WIDE TEXT")
 
         options.append(self.flash)
         options.append(self.wide)
         outer.append(options)
 
+        # ----------------------------------------------------
         # Send
+        # ----------------------------------------------------
+
         self.send_button = Gtk.Button(
             label="SEND TO SIGN"
         )
-        self.send_button.add_css_class(
-            "suggested-action"
-        )
+        self.send_button.add_css_class("suggested-action")
+        self.send_button.add_css_class("send-button")
         self.send_button.set_size_request(-1, 58)
         self.send_button.connect(
             "clicked",
@@ -233,11 +627,11 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         )
         outer.append(self.send_button)
 
+        # ----------------------------------------------------
         # Presets
-        label = Gtk.Label()
-        label.set_markup('<b>QUICK PRESETS</b>')
-        label.set_xalign(0)
-        outer.append(label)
+        # ----------------------------------------------------
+
+        outer.append(section_label("QUICK TRANSMIT"))
 
         preset_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -263,21 +657,36 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
 
         outer.append(preset_row)
 
+        # ----------------------------------------------------
         # Footer
-        footer_sep = Gtk.Separator()
-        outer.append(footer_sep)
+        # ----------------------------------------------------
+
+        outer.append(Gtk.Separator())
 
         footer = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=12,
+            spacing=10,
         )
 
         self.status = Gtk.Label()
         self.status.set_xalign(0)
         self.status.set_hexpand(True)
+        self.status.add_css_class("footer-status")
+
+        hardware = Gtk.Button(label="HARDWARE SETUP")
+        hardware.connect(
+            "clicked",
+            self.on_hardware_setup,
+        )
+
+        about = Gtk.Button(label="ABOUT")
+        about.connect(
+            "clicked",
+            self.on_about,
+        )
 
         refresh = Gtk.Button(
-            label="Refresh Connection"
+            label="REFRESH"
         )
         refresh.connect(
             "clicked",
@@ -285,38 +694,66 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         )
 
         footer.append(self.status)
+        footer.append(hardware)
+        footer.append(about)
         footer.append(refresh)
         outer.append(footer)
 
         self.refresh_connection()
 
+        # Automatically notice plug/unplug without transmitting.
+        self.connection_timer = GLib.timeout_add_seconds(
+            2,
+            self.connection_tick,
+        )
+
     def dropdown_text(self, dropdown):
         item = dropdown.get_selected_item()
         return item.get_string()
 
-    def refresh_connection(self):
+    def connection_tick(self):
+        self.refresh_connection(quiet=True)
+        return True
+
+    def refresh_connection(self, quiet=False):
         controller = BetaBriteController(
             port=PORT
         )
 
+        self.connection.remove_css_class(
+            "connection-online"
+        )
+        self.connection.remove_css_class(
+            "connection-offline"
+        )
+
         if controller.connected:
-            self.connection.set_markup(
-                '<span weight="bold">● CONNECTED</span>'
+            self.connection.set_text("● SIGN ONLINE")
+            self.connection.add_css_class(
+                "connection-online"
             )
-            self.status.set_text(
-                f"Device ready: {PORT}"
-            )
+
+            if not quiet:
+                self.status.set_text(
+                    f"{PORT}  //  9600 7E1  //  READY"
+                )
+
             self.send_button.set_sensitive(True)
+
         else:
-            self.connection.set_markup(
-                '<span weight="bold">● DISCONNECTED</span>'
+            self.connection.set_text("● SIGN OFFLINE")
+            self.connection.add_css_class(
+                "connection-offline"
             )
-            self.status.set_text(
-                f"Device not found: {PORT}"
-            )
+
+            if not quiet:
+                self.status.set_text(
+                    f"{PORT} not detected — open Hardware Setup"
+                )
+
             self.send_button.set_sensitive(False)
 
-    def on_refresh(self, button):
+    def on_refresh(self, *_):
         self.refresh_connection()
 
     def on_color(self, button, name):
@@ -345,6 +782,26 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
 
     def on_preset(self, button, text):
         self.message.set_text(text)
+        self.message.grab_focus()
+        self.message.set_position(-1)
+
+    def on_hardware_setup(self, *_):
+        if (
+            self.hardware_window is None
+            or not self.hardware_window.get_visible()
+        ):
+            self.hardware_window = HardwareSetupWindow(self)
+
+        self.hardware_window.present()
+
+    def on_about(self, *_):
+        if (
+            self.about_window is None
+            or not self.about_window.get_visible()
+        ):
+            self.about_window = AboutWindow(self)
+
+        self.about_window.present()
 
     def on_send(self, *args):
         message = self.message.get_text().strip()
@@ -355,9 +812,12 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             )
             return
 
-        self.refresh_connection()
+        self.refresh_connection(quiet=True)
 
         if not self.send_button.get_sensitive():
+            self.status.set_text(
+                "SIGN OFFLINE — open Hardware Setup."
+            )
             return
 
         selected_mode = self.dropdown_text(
@@ -368,7 +828,7 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         )
 
         self.send_button.set_sensitive(False)
-        self.status.set_text("Sending...")
+        self.status.set_text("TRANSMITTING...")
 
         try:
             controller = BetaBriteController(
@@ -386,16 +846,16 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             )
 
             self.status.set_text(
-                f'Sent: "{message}"'
+                f'TRANSMITTED  //  "{message}"'
             )
 
         except Exception as exc:
             self.status.set_text(
-                f"Send failed: {exc}"
+                f"TRANSMIT FAILED  //  {exc}"
             )
 
         finally:
-            self.refresh_connection()
+            self.refresh_connection(quiet=True)
 
 
 class BetaBriteApp(Gtk.Application):
@@ -404,8 +864,25 @@ class BetaBriteApp(Gtk.Application):
             application_id="dev.grubbs.BetaBriteController"
         )
 
+    def do_startup(self):
+        Gtk.Application.do_startup(self)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS.encode())
+
+        display = Gdk.Display.get_default()
+        Gtk.StyleContext.add_provider_for_display(
+            display,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
     def do_activate(self):
-        window = BetaBriteWindow(self)
+        window = self.props.active_window
+
+        if window is None:
+            window = BetaBriteWindow(self)
+
         window.present()
 
 
