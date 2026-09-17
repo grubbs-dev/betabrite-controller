@@ -3,7 +3,7 @@ Version=1.0
 Type=Application
 Name=Install BetaBrite Controller
 Comment=Install the BetaBrite LED sign controller
-Exec=sh -c 'cd "$(dirname "$1")" && exec ./install.sh; printf "\nPress Enter to close..."; read _' dummy %k
+Exec=sh -c 'cd "$(dirname "$1")" && bash ./install.sh; status=$?; printf "\nPress Enter to close..."; read _; exit $status' dummy %k
 Icon=utilities-terminal
 Terminal=true
 Categories=Utility;

@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible problem with BetaBrite Controller
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `betabrite --version` if available.
+      placeholder: "betabrite 1.0.0"
+
+  - type: input
+    id: fedora
+    attributes:
+      label: Fedora version
+      placeholder: "Fedora 44"
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Sign and adapter
+      description: Include the sign model and USB serial adapter/chipset.
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Include relevant terminal output, especially `/dev/betabrite`, `lsusb`, or launch errors.
+      render: shell
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
