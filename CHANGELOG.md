@@ -4,6 +4,27 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
+## [1.2.0] - Unreleased
+
+### Added
+
+- Portable PySide6 / Qt 6 desktop foundation for Windows, macOS, and Linux
+- `betabrite-desktop` application entry point
+- Cross-platform adapter selection, remember/forget controls, and active connection status in the portable window
+- Toolkit-independent desktop adapter presentation model and unit tests
+- Portable desktop smoke-test CI on Windows, macOS, and Linux
+- Portable GUI architecture and deployment documentation
+
+### Changed
+
+- Development package version advanced to `1.2.0.dev0`
+- GitHub Actions checkout/setup-python actions moved to their current Node 24 generation
+
+### Notes
+
+- The GTK4 desktop application remains the Fedora reference UI during the portable GUI migration.
+- Portable desktop CI validates the application runtime, but physical Windows/macOS BetaBrite hardware validation is still pending.
+
 ## [1.1.0] - 2026-09-17
 
 ### Added
