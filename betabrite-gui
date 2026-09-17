@@ -11,6 +11,10 @@ from betabrite_controller import (
     __author__,
     __tagline__,
 )
+from betabrite_controller.connection import (
+    BetaBriteTransportError,
+    ConnectionDiagnostic,
+)
 from betabrite_controller.controller import (
     BetaBriteController,
     COLORS as BACKEND_COLORS,
@@ -18,6 +22,13 @@ from betabrite_controller.controller import (
     SPECIALS as BACKEND_SPECIALS,
     DEFAULT_PORT,
 )
+from betabrite_controller.devices import (
+    diagnose_device,
+    forget_port,
+    list_candidate_devices,
+    remember_port,
+)
+from betabrite_controller.presentation import connection_view
 
 PORT = DEFAULT_PORT
 
@@ -77,6 +88,15 @@ window {
     background: alpha(@success_color, 0.16);
     color: @success_color;
     border: 1px solid alpha(@success_color, 0.50);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 800;
+}
+
+.connection-selected {
+    background: alpha(@theme_fg_color, 0.10);
+    color: @theme_fg_color;
+    border: 1px solid alpha(@theme_fg_color, 0.28);
     border-radius: 999px;
     padding: 8px 14px;
     font-weight: 800;
@@ -185,14 +205,43 @@ class HardwareSetupWindow(Gtk.Window):
             "SIGN     Adaptive Micro Systems BetaBrite 213C-1 // Series B",
             "ADAPTER  DSD TECH SH-RJ12C // Prolific PL2303GT",
             "SERIAL   9600 baud // 7 data bits // even parity // 1 stop bit",
-            f"DEVICE   {PORT}",
         ):
             row = Gtk.Label(label=text)
             row.set_xalign(0)
             row.set_selectable(True)
             info.append(row)
 
+        self.device_row = Gtk.Label(label="DEVICE   discovering...")
+        self.device_row.set_xalign(0)
+        self.device_row.set_selectable(True)
+        info.append(self.device_row)
+
         outer.append(info)
+
+        outer.append(section_label("SERIAL ADAPTER"))
+
+        self.device_ports = []
+        self.device_dropdown = Gtk.DropDown.new_from_strings(
+            ["Searching for USB serial adapters..."]
+        )
+        outer.append(self.device_dropdown)
+
+        device_actions = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+        )
+
+        remember = Gtk.Button(label="USE SELECTED ADAPTER")
+        remember.set_hexpand(True)
+        remember.connect("clicked", self.on_remember)
+
+        forget = Gtk.Button(label="FORGET SAVED ADAPTER")
+        forget.set_hexpand(True)
+        forget.connect("clicked", self.on_forget)
+
+        device_actions.append(remember)
+        device_actions.append(forget)
+        outer.append(device_actions)
 
         outer.append(section_label("RJ12 WIRING"))
 
@@ -298,35 +347,100 @@ class HardwareSetupWindow(Gtk.Window):
 
         self.refresh_device()
 
-    def refresh_device(self):
-        controller = BetaBriteController(port=PORT)
+    def populate_devices(self):
+        devices = list_candidate_devices()
+        self.device_ports = [device.device for device in devices]
 
-        if controller.connected:
-            self.device_status.set_markup(
-                f'<span weight="bold">● DEVICE DETECTED</span>   {PORT}'
-            )
-            self.test_button.set_sensitive(True)
+        if not devices:
+            labels = ["No USB serial adapters detected"]
         else:
-            self.device_status.set_markup(
-                f'<span weight="bold">● DEVICE NOT DETECTED</span>   {PORT}'
-            )
-            self.test_button.set_sensitive(False)
+            labels = [
+                (
+                    f"{device.device}  //  {device.display_name}"
+                    + (f"  [{device.usb_id}]" if device.usb_id else "")
+                    + ("  // TESTED" if device.preferred else "")
+                )
+                for device in devices
+            ]
+
+        self.device_dropdown.set_model(Gtk.StringList.new(labels))
+        self.device_dropdown.set_selected(0)
+
+    def selected_device_port(self):
+        index = self.device_dropdown.get_selected()
+        if index < 0 or index >= len(self.device_ports):
+            return None
+        return self.device_ports[index]
+
+    def refresh_device(self):
+        self.populate_devices()
+        controller = BetaBriteController(port=PORT)
+        diagnostic = controller.check_connection()
+        view = connection_view(diagnostic)
+
+        port_text = view.port or "none"
+        self.device_row.set_text(f"DEVICE   {port_text}")
+        self.device_status.set_text(
+            f"{view.headline}   {view.detail}"
+        )
+        self.test_button.set_sensitive(view.can_send)
 
     def on_refresh(self, *_):
         self.refresh_device()
-        self.parent_window.refresh_connection()
+        self.parent_window.refresh_connection(active=True)
+
+    def on_remember(self, *_):
+        port = self.selected_device_port()
+        if port is None:
+            self.device_status.set_text(
+                "No USB serial adapter is available to remember."
+            )
+            return
+
+        try:
+            selection = remember_port(port)
+            self.device_status.set_text(
+                f"Saved {selection.port} as the preferred BetaBrite adapter."
+            )
+            self.parent_window.status.set_text(
+                f"Saved adapter // {selection.port}"
+            )
+        except Exception as exc:
+            self.device_status.set_text(
+                f"Could not save adapter: {exc}"
+            )
+            return
+
+        self.refresh_device()
+        self.parent_window.refresh_connection(active=True)
+
+    def on_forget(self, *_):
+        forget_port()
+        self.device_status.set_text(
+            "Forgot the saved BetaBrite serial adapter."
+        )
+        self.parent_window.status.set_text(
+            "Saved adapter cleared."
+        )
+        self.refresh_device()
+        self.parent_window.refresh_connection(active=True)
 
     def on_test(self, *_):
-        self.refresh_device()
+        controller = BetaBriteController(port=PORT)
+        diagnostic = controller.check_connection()
+        view = connection_view(diagnostic)
 
-        if not self.test_button.get_sensitive():
+        if not view.can_send:
+            self.device_status.set_text(
+                f"{view.headline}   {view.detail}"
+            )
+            self.test_button.set_sensitive(False)
             return
 
         self.test_button.set_sensitive(False)
         self.device_status.set_text("Transmitting hardware test...")
 
         try:
-            controller = BetaBriteController(port=PORT)
             controller.send(
                 message="BETABRITE // READY",
                 color_name="green",
@@ -334,14 +448,22 @@ class HardwareSetupWindow(Gtk.Window):
                 speed_level=3,
             )
 
+            self.parent_window.last_ready_port = controller.last_port
             self.device_status.set_text(
-                'Test passed — sent "BETABRITE // READY"'
+                'Test transmitted — sent "BETABRITE // READY"'
             )
             self.parent_window.status.set_text(
                 "Hardware test transmitted successfully."
             )
 
+        except BetaBriteTransportError as exc:
+            label = exc.state.replace("-", " ").upper()
+            self.parent_window.last_ready_port = None
+            self.device_status.set_text(f"{label}: {exc}")
+            self.parent_window.status.set_text(f"{label} // {exc}")
+
         except Exception as exc:
+            self.parent_window.last_ready_port = None
             self.device_status.set_text(
                 f"Hardware test failed: {exc}"
             )
@@ -350,8 +472,8 @@ class HardwareSetupWindow(Gtk.Window):
             )
 
         finally:
-            self.refresh_device()
-            self.parent_window.refresh_connection()
+            self.test_button.set_sensitive(True)
+            self.parent_window.refresh_connection(quiet=True)
 
 
 class AboutWindow(Gtk.Window):
@@ -433,6 +555,7 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         self.speed_buttons = {}
         self.hardware_window = None
         self.about_window = None
+        self.last_ready_port = None
 
         outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
@@ -699,9 +822,9 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         footer.append(refresh)
         outer.append(footer)
 
-        self.refresh_connection()
+        self.refresh_connection(active=True)
 
-        # Automatically notice plug/unplug without transmitting.
+        # Automatically notice plug/unplug without repeatedly opening the port.
         self.connection_timer = GLib.timeout_add_seconds(
             2,
             self.connection_tick,
@@ -715,46 +838,69 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         self.refresh_connection(quiet=True)
         return True
 
-    def refresh_connection(self, quiet=False):
-        controller = BetaBriteController(
-            port=PORT
-        )
+    def refresh_connection(self, quiet=False, active=False):
+        controller = BetaBriteController(port=PORT)
 
-        self.connection.remove_css_class(
-            "connection-online"
-        )
-        self.connection.remove_css_class(
-            "connection-offline"
-        )
-
-        if controller.connected:
-            self.connection.set_text("● SIGN ONLINE")
-            self.connection.add_css_class(
-                "connection-online"
-            )
-
-            if not quiet:
-                self.status.set_text(
-                    f"{PORT}  //  9600 7E1  //  READY"
-                )
-
-            self.send_button.set_sensitive(True)
-
+        if active:
+            diagnostic = controller.check_connection()
+            if diagnostic.ready:
+                self.last_ready_port = diagnostic.port
+            else:
+                self.last_ready_port = None
         else:
-            self.connection.set_text("● SIGN OFFLINE")
-            self.connection.add_css_class(
-                "connection-offline"
+            diagnostic = diagnose_device(PORT)
+
+        display_diagnostic = diagnostic
+
+        if (
+            not active
+            and diagnostic.state == "selected"
+            and diagnostic.port == self.last_ready_port
+        ):
+            display_diagnostic = ConnectionDiagnostic(
+                state="ready",
+                message=(
+                    f"Serial port {diagnostic.port} remains selected "
+                    "after the last successful connection check."
+                ),
+                port=diagnostic.port,
+                source=diagnostic.source,
             )
 
-            if not quiet:
-                self.status.set_text(
-                    f"{PORT} not detected — open Hardware Setup"
-                )
+        if diagnostic.state in {
+            "no-adapter",
+            "not-found",
+            "port-not-found",
+        }:
+            self.last_ready_port = None
 
-            self.send_button.set_sensitive(False)
+        view = connection_view(display_diagnostic)
+
+        for css_class in (
+            "connection-online",
+            "connection-selected",
+            "connection-offline",
+        ):
+            self.connection.remove_css_class(css_class)
+
+        css_class = {
+            "online": "connection-online",
+            "selected": "connection-selected",
+            "offline": "connection-offline",
+        }[view.tone]
+
+        self.connection.set_text(view.headline)
+        self.connection.add_css_class(css_class)
+        self.send_button.set_sensitive(view.can_send)
+
+        if not quiet:
+            port = view.port or "no port"
+            self.status.set_text(
+                f"{port}  //  {view.state.upper()}  //  {view.detail}"
+            )
 
     def on_refresh(self, *_):
-        self.refresh_connection()
+        self.refresh_connection(active=True)
 
     def on_color(self, button, name):
         if not button.get_active():
@@ -816,7 +962,7 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
 
         if not self.send_button.get_sensitive():
             self.status.set_text(
-                "SIGN OFFLINE — open Hardware Setup."
+                "Connection is not ready — open Hardware Setup or press Refresh."
             )
             return
 
@@ -845,11 +991,20 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
                 wide=self.wide.get_active(),
             )
 
+            self.last_ready_port = controller.last_port
             self.status.set_text(
                 f'TRANSMITTED  //  "{message}"'
             )
 
+        except BetaBriteTransportError as exc:
+            self.last_ready_port = None
+            label = exc.state.replace("-", " ").upper()
+            self.status.set_text(
+                f"{label}  //  {exc}"
+            )
+
         except Exception as exc:
+            self.last_ready_port = None
             self.status.set_text(
                 f"TRANSMIT FAILED  //  {exc}"
             )

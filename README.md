@@ -17,7 +17,9 @@ The project currently includes:
 - Cross-platform serial discovery for Windows, macOS, and Linux
 - Automatic detection of the physically tested PL2303GT USB serial adapter
 - Command-line controller for messages, effects, automation, and diagnostics
-- GTK4 desktop controller for Fedora Linux
+- Persistent per-user USB adapter selection with stable USB identity matching
+- Active serial connection checks with customer-friendly error states
+- GTK4 desktop controller for Fedora Linux using the same connection-state backend
 - Fedora one-click installer with udev and serial-permission setup
 - Hardware and wiring documentation for the tested sign/adapter combination
 - Automated tests across Windows, macOS, and Linux
@@ -146,6 +148,25 @@ Inspect serial devices:
 
 ```bash
 betabrite --list-ports
+```
+
+Inspect passive adapter selection:
+
+```bash
+betabrite --status
+```
+
+Actively verify that the serial adapter can be opened:
+
+```bash
+betabrite --check-connection
+```
+
+Remember or clear the preferred adapter:
+
+```bash
+betabrite --remember-port
+betabrite --forget-port
 ```
 
 See all options:

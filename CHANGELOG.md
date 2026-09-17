@@ -14,12 +14,20 @@ The project uses semantic versioning for public releases.
 - `betabrite --list-ports` for inspecting detected serial devices
 - Standard Python project metadata and a `betabrite` console entry point
 - Core CI coverage on Windows, macOS, and Linux
+- Persistent per-user adapter selection using USB VID/PID and serial identity
+- `--status`, `--remember-port`, `--forget-port`, and `--list-all-ports`
+- Active serial transport verification with `--check-connection`
+- Stable customer-facing states for missing, busy, permission-denied, and failed serial ports
+- Shared connection-state presentation helpers for desktop interfaces
+- GTK4 Hardware Setup controls for remembering and forgetting the preferred adapter
 
 ### Changed
 
 - The controller now uses `auto` as its default port instead of hard-coding `/dev/betabrite`
 - Explicit Windows `COM` ports and macOS/Linux device paths can be selected with `--port`
 - pySerial is now an explicit project dependency
+- The GTK4 GUI now displays real backend connection states instead of a simple online/offline boolean
+- The GUI displays the resolved serial port instead of the literal `auto` selector
 
 ### Notes
 
