@@ -4,7 +4,7 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-09-17
 
 ### Added
 
