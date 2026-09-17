@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from . import __author__, __version__
+from .connection import BetaBriteTransportError
 from .controller import (
     BetaBriteController,
     COLORS,
@@ -93,7 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--status",
         action="store_true",
-        help="Show adapter selection and saved-device diagnostics",
+        help="Show passive adapter selection and saved-device diagnostics",
+    )
+    parser.add_argument(
+        "--check-connection",
+        action="store_true",
+        help="Actively verify that the selected serial port can be opened",
     )
     parser.add_argument(
         "--remember-port",
@@ -182,6 +188,24 @@ def print_status(port: str) -> int:
     return 0 if diagnostic.ready else 1
 
 
+def print_connection_check(port: str) -> int:
+    controller = BetaBriteController(port=port)
+    diagnostic = controller.check_connection()
+
+    print("\nBetaBrite connection check:")
+    print(f"  state:      {diagnostic.state.upper()}")
+    if diagnostic.port:
+        print(f"  port:       {diagnostic.port}")
+    if diagnostic.source:
+        print(f"  selected:   {diagnostic.source}")
+    print(f"  detail:     {diagnostic.message}")
+    print(
+        "  note:       This verifies the computer-to-adapter serial path. "
+        "It does not prove the display acknowledged a message."
+    )
+    return 0 if diagnostic.ready else 2
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -196,6 +220,9 @@ def main(argv=None):
 
     if args.status:
         return print_status(args.port)
+
+    if args.check_connection:
+        return print_connection_check(args.port)
 
     if args.remember_port is not None:
         try:
@@ -245,6 +272,10 @@ def main(argv=None):
             flash=args.flash,
             wide=args.wide,
         )
+    except BetaBriteTransportError as exc:
+        label = exc.state.replace("-", " ").upper()
+        print(f"BetaBrite {label}: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:
         print(f"BetaBrite error: {exc}", file=sys.stderr)
         return 1

@@ -87,7 +87,8 @@ class DeviceDiagnostic:
 
     @property
     def ready(self) -> bool:
-        return self.state == "ready"
+        """Backward-compatible success flag for passive device selection."""
+        return self.state in {"selected", "ready"}
 
 
 def _from_port_info(info) -> SerialDevice:
@@ -325,10 +326,10 @@ def diagnose_device(
     if device is None:
         message = f"Serial port {selection.port} is selected."
     else:
-        message = f"{device.display_name} on {selection.port} is ready."
+        message = f"{device.display_name} on {selection.port} is selected."
 
     return DeviceDiagnostic(
-        state="ready",
+        state="selected",
         message=message,
         port=selection.port,
         source=selection.source,
