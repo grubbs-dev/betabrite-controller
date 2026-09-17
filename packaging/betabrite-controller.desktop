@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=BetaBrite Controller
+Comment=Control an Alpha/BetaBrite LED display
+Exec=/usr/local/bin/betabrite-gui
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+StartupWMClass=dev.grubbs.BetaBriteController
