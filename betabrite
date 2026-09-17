@@ -1,6 +1,12 @@
 #!/opt/betabrite/venv/bin/python
 
 import argparse
+
+from betabrite_controller import (
+    __app_name__,
+    __version__,
+    __author__,
+)
 import sys
 
 from betabrite_controller.controller import (
@@ -16,6 +22,23 @@ parser = argparse.ArgumentParser(
     prog="betabrite",
     description="Control an Alpha/BetaBrite LED display.",
 )
+
+
+
+parser.add_argument(
+
+
+    "--version",
+
+
+    action="version",
+
+
+    version=f"%(prog)s {__version__} // Created by {__author__}",
+
+
+)
+
 
 parser.add_argument(
     "message",
