@@ -20,6 +20,9 @@ The project uses semantic versioning for public releases.
 - Stable customer-facing states for missing, busy, permission-denied, and failed serial ports
 - Shared connection-state presentation helpers for desktop interfaces
 - GTK4 Hardware Setup controls for remembering and forgetting the preferred adapter
+- Standard wheel and Python source-distribution validation in CI
+- Release-time package-version/tag validation
+- Packaging and distribution documentation for current and future artifacts
 
 ### Changed
 
@@ -28,6 +31,9 @@ The project uses semantic versioning for public releases.
 - pySerial is now an explicit project dependency
 - The GTK4 GUI now displays real backend connection states instead of a simple online/offline boolean
 - The GUI displays the resolved serial port instead of the literal `auto` selector
+- The Fedora installer now installs the controller through `pyproject.toml` instead of manually copying the backend package
+- Normal uninstall preserves per-user device settings; `--purge-settings` removes them explicitly
+- Tagged releases now include standard Python wheel/source-distribution artifacts in addition to complete source archives
 
 ### Notes
 

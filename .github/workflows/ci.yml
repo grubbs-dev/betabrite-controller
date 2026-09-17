@@ -57,3 +57,43 @@ jobs:
 
       - name: Check shell syntax
         run: bash -n install.sh uninstall.sh test.sh scripts/build-release.sh
+
+
+  package:
+    name: Package artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install packaging tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Validate package metadata
+        run: python -m twine check dist/*
+
+      - name: Install built wheel
+        run: python -m pip install dist/*.whl
+
+      - name: Smoke-test packaged CLI
+        run: |
+          betabrite --version
+          betabrite --list-ports
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: |
+            dist/*.whl
+            dist/*.tar.gz

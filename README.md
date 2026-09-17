@@ -96,7 +96,7 @@ The current complete GUI installer supports Fedora Linux.
 bash install.sh
 ```
 
-The installer configures the GTK4 application, isolated Python runtime, desktop launcher, tested USB adapter rule, and serial permissions.
+The installer configures the GTK4 application, installs the controller through the standard Python package metadata, creates an isolated runtime with Fedora's GTK bindings, adds launchers, configures the tested USB adapter rule, and enables serial permissions.
 
 ### Cross-platform controller core
 
@@ -114,7 +114,7 @@ betabrite --list-ports
 betabrite "HELLO WORLD"
 ```
 
-This Python-based installation is an interim developer/advanced-user path. The planned portable GUI release will bundle its runtime and dependencies.
+This Python-based installation is an interim developer/advanced-user path. Tagged releases also publish a standard wheel and Python source distribution. The planned portable GUI release will bundle its runtime and dependencies so normal desktop users do not need Python or pip.
 
 ## Use
 
@@ -237,7 +237,9 @@ betabrite-controller/
 
 Version history is tracked in [CHANGELOG.md](CHANGELOG.md).
 
-The current release pipeline publishes source archives and checksums. Native Windows, macOS, and portable Linux application artifacts will be added with the portable GUI packaging phase.
+Tagged releases publish complete source archives, a standard Python wheel, a Python source distribution, and checksums. See [Packaging and distribution](docs/packaging.md) for the artifact boundary and future native-app targets.
+
+Native Windows, macOS, and portable Linux desktop artifacts will be added only after the portable GUI packaging phase is implemented and validated.
 
 ## License
 

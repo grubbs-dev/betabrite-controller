@@ -22,8 +22,22 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - name: Install Python dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install build twine
+          python -m pip install .
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          package_version="$(python -c 'from betabrite_controller import __version__; print(__version__)')"
+          tag_version="${GITHUB_REF_NAME#v}"
+
+          if [[ "$package_version" != "$tag_version" ]]; then
+            echo "Tag version $tag_version does not match package version $package_version." >&2
+            exit 1
+          fi
 
       - name: Validate sources
         run: |
@@ -31,16 +45,36 @@ jobs:
           python -m py_compile betabrite betabrite-gui betabrite_controller/*.py tests/*.py
           python -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Build release archives
+      - name: Build source release archives
         run: bash scripts/build-release.sh "${GITHUB_REF_NAME}"
+
+      - name: Build Python package artifacts
+        run: |
+          python -m build --outdir dist
+          python -m twine check \
+            dist/betabrite_controller-*.whl \
+            dist/betabrite_controller-*.tar.gz
+
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum \
+            betabrite-controller-*.tar.gz \
+            betabrite-controller-*.zip \
+            betabrite_controller-*.whl \
+            betabrite_controller-*.tar.gz \
+            > SHA256SUMS
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            dist/*.tar.gz \
-            dist/*.zip \
+            dist/betabrite-controller-*.tar.gz \
+            dist/betabrite-controller-*.zip \
+            dist/betabrite_controller-*.whl \
+            dist/betabrite_controller-*.tar.gz \
             dist/SHA256SUMS \
             --verify-tag \
             --generate-notes \
