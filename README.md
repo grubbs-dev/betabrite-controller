@@ -19,7 +19,7 @@ The project currently includes:
 - Command-line controller for messages, effects, automation, and diagnostics
 - Persistent per-user USB adapter selection with stable USB identity matching
 - Active serial connection checks with customer-friendly error states
-- Portable PySide6 / Qt desktop foundation for Windows, macOS, and Linux
+- Portable PySide6 / Qt desktop controller for Windows, macOS, and Linux
 - GTK4 desktop controller for Fedora Linux using the same connection-state backend
 - Fedora one-click installer with udev and serial-permission setup
 - Hardware and wiring documentation for the tested sign/adapter combination
@@ -32,11 +32,11 @@ The project currently includes:
 | Controller backend | ✓ | ✓ | ✓ |
 | Serial auto-discovery | ✓ | ✓ | ✓ |
 | Command-line interface | ✓ | ✓ | ✓ |
-| Portable Qt GUI foundation | CI | CI | CI |
+| Portable Qt GUI (development) | CI | CI | CI |
 | Current GTK4 GUI | — | — | ✓ |
 | Current one-click installer | — | — | Fedora |
 
-The portable Qt GUI is now under active 1.2 development. Its foundation is smoke-tested on all three desktop operating systems; the Fedora GTK4 app remains the physically validated reference UI until feature parity and native packaging are complete.
+The portable Qt GUI is now under active 1.2 development. The controller surface and runtime are CI-tested on Windows, macOS, and Linux; physical BetaBrite validation remains centered on Fedora until the same hardware path is exercised on Windows and macOS and native packaging is complete.
 
 ## Tested hardware
 
@@ -207,7 +207,7 @@ During 1.2 development, launch the cross-platform Qt application with:
 betabrite-desktop
 ```
 
-The current foundation provides real adapter discovery, active connection state, and remembered-adapter controls. Message composition and full GTK feature parity are the next portable GUI milestone.
+The portable application provides real adapter discovery, remembered-adapter controls, active READY diagnostics, message composition, colors, display modes, special effects, speed, flash/wide formatting, quick presets, and physical transmission through the same controller backend used by the CLI and Fedora GTK application.
 
 ### Fedora desktop app
 
@@ -259,6 +259,7 @@ betabrite-controller/
 │   ├── devices.py                # cross-platform serial discovery
 │   ├── desktop.py                # portable PySide6 desktop entry point
 │   ├── desktop_model.py          # toolkit-independent desktop view model
+│   ├── desktop_controls.py       # toolkit-independent composer/transmit model
 │   └── cli.py                    # portable command-line interface
 ├── packaging/                    # current Linux desktop/udev assets
 ├── tests/

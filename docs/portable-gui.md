@@ -27,7 +27,9 @@ Portable desktop responsibilities:
 
 `desktop_model.py` intentionally contains toolkit-independent adapter presentation logic so it can be unit tested without a graphical runtime.
 
-`desktop.py` is the PySide6 application entry point.
+`desktop_controls.py` contains toolkit-independent message-draft validation, preset data, and READY-gated transmit-state logic.
+
+`desktop.py` is the PySide6 graphical application. `desktop_launcher.py` keeps the smoke-test path headless-safe for CI.
 
 ## Development
 
@@ -49,16 +51,22 @@ Launch the portable window:
 betabrite-desktop
 ```
 
-The first foundation milestone provides:
+The portable controller currently provides:
 
 - branded Qt window
 - actual serial adapter enumeration
 - tested/saved adapter labels
-- active connection checking
+- active connection checking and passive plug/unplug monitoring
 - remember/forget adapter controls
+- READY-gated physical transmission
+- message composition and quick presets
+- backend-driven color and display-mode selection
+- special effects
+- speed 1-5, flash, and wide-text formatting
 - the existing READY / NO ADAPTER / permission / busy / failure state model
+- explicit language that successful writes do not prove display acknowledgment
 
-It does not yet replace the full GTK controller.
+The GTK4 controller remains the Fedora reference application while native packaging and target-platform physical hardware validation are completed.
 
 ## Cross-platform CI
 
