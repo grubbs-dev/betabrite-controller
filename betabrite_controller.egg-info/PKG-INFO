@@ -1,3 +1,20 @@
+Metadata-Version: 2.4
+Name: betabrite-controller
+Version: 1.1.0
+Summary: Cross-platform controller core for classic Alpha/BetaBrite LED signs
+Author: Grubbs
+Project-URL: Homepage, https://github.com/grubbs-dev/betabrite-controller
+Project-URL: Repository, https://github.com/grubbs-dev/betabrite-controller
+Project-URL: Issues, https://github.com/grubbs-dev/betabrite-controller/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: POSIX :: Linux
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: alphasignpy==0.1.1
+Requires-Dist: pyserial<4,>=3.5
+
 # BetaBrite Controller
 
 **Legacy sign. Modern control.**

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from alphasign import (
     Sign,
     SignType,
@@ -17,8 +15,15 @@ from alphasign import (
     CTRL_WIDE_OFF,
 )
 
+from .devices import (
+    AUTO_PORT,
+    DeviceDiscoveryError,
+    port_is_available,
+    resolve_port,
+)
 
-DEFAULT_PORT = "/dev/betabrite"
+
+DEFAULT_PORT = AUTO_PORT
 
 
 COLORS = {
@@ -91,13 +96,23 @@ class BetaBriteController:
         address="00",
         type_code=b"Z",
     ):
-        self.port = port
+        self.port = port or DEFAULT_PORT
         self.address = address
         self.type_code = type_code
+        self.last_port = None
+
+    @property
+    def resolved_port(self):
+        """Return the selected serial port, or ``None`` when auto-detection fails."""
+        try:
+            return resolve_port(self.port)
+        except DeviceDiscoveryError:
+            return None
 
     @property
     def connected(self):
-        return Path(self.port).exists()
+        port = self.resolved_port
+        return bool(port and port_is_available(port))
 
     def build_content(
         self,
@@ -183,6 +198,9 @@ class BetaBriteController:
             display_mode = MODES[mode_name]
             special_mode = None
 
+        port = resolve_port(self.port)
+        self.last_port = port
+
         sign = Sign(
             sign_type=SignType.ALL,
             address=self.address,
@@ -190,7 +208,7 @@ class BetaBriteController:
 
         try:
             sign.open(
-                self.port,
+                port,
                 baudrate=9600,
                 bytesize=7,
                 parity="E",

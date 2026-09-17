@@ -1,31 +1,93 @@
 # Troubleshooting
 
-## `SIGN OFFLINE` or `/dev/betabrite` is missing
+## Start with serial discovery
 
-Confirm the USB serial adapter is connected:
+Run:
+
+```bash
+betabrite --list-ports
+```
+
+For the physically tested DSD TECH / PL2303GT adapter, look for USB ID:
+
+```text
+067b:23a3
+```
+
+The tested adapter is marked with `*`.
+
+If no ports are listed, the operating system is not currently exposing the USB adapter as a serial device. Check the cable, USB connection, and any required chipset driver.
+
+## Multiple USB serial adapters are connected
+
+Automatic mode refuses to guess when several possible USB serial adapters are present.
+
+List the ports:
+
+```bash
+betabrite --list-ports
+```
+
+Then select the BetaBrite adapter explicitly.
+
+Windows:
+
+```bash
+betabrite "TEST" --port COM4
+```
+
+macOS:
+
+```bash
+betabrite "TEST" --port /dev/cu.usbserial-XXXX
+```
+
+Linux:
+
+```bash
+betabrite "TEST" --port /dev/ttyUSB0
+```
+
+## Windows
+
+If the adapter does not appear in `betabrite --list-ports`, open **Device Manager** and look under **Ports (COM & LPT)**.
+
+The tested hardware uses a Prolific PL2303GT chipset. The exact COM number is assigned by Windows and may differ between computers or USB ports.
+
+## macOS
+
+Check the controller's detected list first:
+
+```bash
+betabrite --list-ports
+```
+
+macOS serial devices commonly appear as `/dev/cu.*`. If a USB serial adapter is missing completely, verify that macOS recognizes the adapter and that any required vendor driver is installed.
+
+## Linux / Fedora
+
+The cross-platform controller can use the normal `/dev/ttyUSB*` device directly. The Fedora installer additionally creates the stable `/dev/betabrite` symlink for the tested adapter.
+
+Check USB detection:
 
 ```bash
 lsusb
 ```
 
-For the tested PL2303GT adapter, look for vendor/product IDs `067b:23a3`.
-
-Then check for the stable device symlink:
+Check the stable symlink:
 
 ```bash
 ls -l /dev/betabrite
 ```
 
-If it is missing, reload udev rules:
+If needed, reload udev rules:
 
 ```bash
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
-Unplug and reconnect the adapter, then check again.
-
-## Permission denied opening the serial device
+### Permission denied
 
 Check your group membership:
 
@@ -33,56 +95,49 @@ Check your group membership:
 groups
 ```
 
-The user running BetaBrite Controller should be a member of `dialout`.
+The user running BetaBrite Controller should normally be a member of `dialout` on Fedora.
 
-If the installer just added that membership, log out of Fedora and log back in once. Starting a new terminal alone does not always refresh the login session's groups.
-
-## Confirm the installed udev rule
-
-```bash
-cat /etc/udev/rules.d/99-betabrite.rules
-```
-
-The tested adapter rule should contain vendor ID `067b` and product ID `23a3`.
+If the installer just added that membership, log out of Fedora and log back in once.
 
 ## Test from the command line
 
-Verify the CLI is installed:
+Verify the CLI:
 
 ```bash
 betabrite --version
+betabrite --list-ports
 ```
 
-Then try a simple message:
+Then send a known-simple message:
 
 ```bash
 betabrite "TEST" --color green --mode hold
 ```
 
-If the GUI and CLI both fail in the same way, the problem is usually below the UI layer: device detection, permissions, wiring, or serial hardware.
+If necessary, specify the detected serial port explicitly with `--port`.
 
-## GUI does not start
+## Fedora GUI does not start
 
-Run it from a terminal so Python/GTK errors are visible:
+The current GTK4 GUI is still a Fedora/Linux component.
+
+Run it from a terminal so GTK/Python errors are visible:
 
 ```bash
 betabrite-gui
 ```
 
-Check the required Fedora packages:
+Check the required packages:
 
 ```bash
 rpm -q python3 python3-pip python3-gobject gtk4
 ```
 
-Re-running the installer is safe for the application files; it recreates the isolated runtime and verifies the backend at the end.
-
 ## Tests
 
-From a repository checkout:
+From a repository checkout on any supported core platform:
 
 ```bash
-bash test.sh
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-The unit tests do not require a physical sign because they use a nonexistent test device path for connection checks.
+The discovery tests use mocked serial-port metadata and do not require a physical sign.
