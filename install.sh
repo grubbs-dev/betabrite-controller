@@ -89,8 +89,31 @@ $SUDO install -Dm644 \
 $SUDO udevadm control --reload-rules
 $SUDO udevadm trigger
 
+# Grant the invoking desktop user access to serial devices.
+INSTALL_USER="${SUDO_USER:-$USER}"
+
+if ! getent group dialout >/dev/null 2>&1; then
+    echo "==> Creating dialout group"
+    $SUDO groupadd --system dialout
+fi
+
+if ! id -nG "$INSTALL_USER" | tr ' ' '\n' | grep -qx dialout; then
+    echo "==> Adding $INSTALL_USER to dialout"
+    $SUDO usermod -aG dialout "$INSTALL_USER"
+    GROUP_CHANGED=1
+else
+    GROUP_CHANGED=0
+fi
+
 echo
 echo "Installation complete."
+
+if [[ "$GROUP_CHANGED" -eq 1 ]]; then
+    echo
+    echo "IMPORTANT:"
+    echo "  Serial-device permission was granted to $INSTALL_USER."
+    echo "  Log out and back in before using the controller."
+fi
 echo
 echo "CLI:"
 echo '  betabrite "HELLO WORLD"'
