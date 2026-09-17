@@ -22,7 +22,7 @@ from alphasign import (
     CTRL_WIDE_OFF,
 )
 
-PORT = "/dev/ttyUSB0"
+PORT = "/dev/betabrite"
 
 COLORS = {
     "Auto": Color.AUTO,
