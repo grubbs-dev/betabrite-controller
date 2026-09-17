@@ -15,6 +15,11 @@ from alphasign import (
     CTRL_WIDE_OFF,
 )
 
+from .connection import (
+    BetaBriteTransportError,
+    classify_transport_exception,
+    probe_connection,
+)
 from .devices import (
     AUTO_PORT,
     DeviceDiscoveryError,
@@ -111,8 +116,17 @@ class BetaBriteController:
 
     @property
     def connected(self):
+        """Return whether the selected serial device is present.
+
+        This is a passive availability check. Use ``check_connection()`` when
+        the application needs to verify that the serial port can actually open.
+        """
         port = self.resolved_port
         return bool(port and port_is_available(port))
+
+    def check_connection(self):
+        """Actively verify that the selected serial transport can be opened."""
+        return probe_connection(self.port)
 
     def build_content(
         self,
@@ -233,6 +247,14 @@ class BetaBriteController:
             )
 
             sign.send(packet)
+
+        except Exception as exc:
+            diagnostic = classify_transport_exception(exc, port)
+            if diagnostic is not None:
+                raise BetaBriteTransportError.from_diagnostic(
+                    diagnostic
+                ) from exc
+            raise
 
         finally:
             try:

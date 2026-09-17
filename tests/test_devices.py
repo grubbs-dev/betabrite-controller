@@ -159,6 +159,25 @@ class DeviceDiscoveryTests(unittest.TestCase):
             "COM5",
         )
 
+    def test_diagnostic_reports_selected_without_opening_port(self):
+        devices = [
+            SerialDevice(
+                device="COM4",
+                vid=0x067B,
+                pid=0x23A3,
+                product="PL2303GT",
+            ),
+        ]
+
+        diagnostic = diagnose_device(
+            settings=AppSettings(),
+            devices=devices,
+        )
+
+        self.assertEqual(diagnostic.state, "selected")
+        self.assertTrue(diagnostic.ready)
+        self.assertIn("selected", diagnostic.message.casefold())
+
     def test_diagnostic_reports_selection_required(self):
         devices = [
             SerialDevice(device="COM4", vid=0x1111, pid=0x2222),

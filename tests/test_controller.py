@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from betabrite_controller.controller import (
     BetaBriteController,
@@ -25,6 +26,16 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(
             self.controller.connected
         )
+
+    @patch("betabrite_controller.controller.probe_connection")
+    def test_check_connection_uses_active_probe(self, probe_connection):
+        sentinel = object()
+        probe_connection.return_value = sentinel
+
+        result = self.controller.check_connection()
+
+        self.assertIs(result, sentinel)
+        probe_connection.assert_called_once_with("/dev/does-not-exist")
 
     def test_all_colors_exist(self):
         self.assertIn("red", COLORS)
