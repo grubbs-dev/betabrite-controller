@@ -154,9 +154,10 @@ Development artifacts currently include:
 
 These development builds bundle the Python and Qt runtime. They do not require the user to install Python, pip, or Git.
 
-Build the native artifact for the current operating system:
+Build the native artifact for the current operating system. On Fedora, install `python3-devel` first so Nuitka can access `Python.h`:
 
 ```bash
+sudo dnf install python3-devel
 python scripts/build-native.py
 ```
 

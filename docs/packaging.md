@@ -36,10 +36,21 @@ Every native build also emits a platform-specific SHA-256 manifest.
 
 The top-level `betabrite_desktop.py` file is the deployment entry point. It delegates to the headless-safe desktop launcher so a compiled application can still run `--smoke-test` without opening a GUI.
 
+### Local Linux prerequisite
+
+Native Linux compilation requires the Python development headers matching the interpreter used by the virtual environment. On Fedora, install them with:
+
+```bash
+sudo dnf install python3-devel
+```
+
+The build wrapper checks for `Python.h` before invoking Nuitka and reports an actionable error if the headers are missing.
+
 `scripts/build-native.py` is the authoritative native build wrapper. It:
 
 - detects the current platform and architecture
-- invokes `pyside6-deploy`
+- creates a fresh `pysidedeploy.spec` for the current build
+- invokes `pyside6-deploy` with noninteractive Nuitka dependency downloads enabled
 - smoke-tests the compiled output
 - renames artifacts consistently
 - packages platform-friendly archives

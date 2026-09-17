@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import hashlib
 import os
 import platform
+import plistlib
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tarfile
 import time
 import zipfile
@@ -21,8 +24,10 @@ from betabrite_controller import __version__
 ROOT = Path(__file__).resolve().parents[1]
 ENTRYPOINT = ROOT / "betabrite_desktop.py"
 DIST = ROOT / "dist" / "native"
+DEPLOY_SPEC = ROOT / "pysidedeploy.spec"
 APP_NAME = "BetaBriteController"
 DISPLAY_NAME = "BetaBrite Controller"
+IGNORE_DIRS = ".git,.venv,build,dist,__pycache__"
 
 
 def platform_name() -> str:
@@ -52,6 +57,78 @@ def run(command: list[str], *, env: dict[str, str] | None = None) -> None:
     subprocess.run(command, cwd=ROOT, check=True, env=env)
 
 
+def ensure_build_prerequisites(target: str) -> None:
+    """Fail early with an actionable message for local native-build prerequisites."""
+    if target != "linux":
+        return
+
+    include_dir = Path(sysconfig.get_paths()["include"])
+    python_header = include_dir / "Python.h"
+    if python_header.exists():
+        return
+
+    distro_hint = ""
+    os_release = Path("/etc/os-release")
+    if os_release.exists():
+        release_text = os_release.read_text(encoding="utf-8", errors="replace")
+        if "fedora" in release_text.lower():
+            distro_hint = (
+                "\nFedora: install the matching development headers with:\n"
+                "  sudo dnf install python3-devel"
+            )
+
+    raise SystemExit(
+        "Python development headers are required for the native Linux build.\n"
+        f"Expected: {python_header}"
+        f"{distro_hint}"
+    )
+
+
+def prepare_deploy_spec(deploy: str) -> Path:
+    """Create a deterministic pyside6-deploy config and make CI non-interactive."""
+    if DEPLOY_SPEC.exists():
+        DEPLOY_SPEC.unlink()
+
+    init_command = [
+        deploy,
+        str(ENTRYPOINT),
+        "-f",
+        "--name",
+        APP_NAME,
+        "--extra-ignore-dirs",
+        IGNORE_DIRS,
+        "--init",
+    ]
+    run(init_command)
+
+    if not DEPLOY_SPEC.exists():
+        raise SystemExit(
+            f"pyside6-deploy did not create the expected config: {DEPLOY_SPEC}"
+        )
+
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(DEPLOY_SPEC, encoding="utf-8")
+
+    if "nuitka" not in config:
+        raise SystemExit("Generated pysidedeploy.spec has no [nuitka] section.")
+
+    extra_args = config["nuitka"].get("extra_args", "").split()
+    required_args = [
+        "--assume-yes-for-downloads",
+    ]
+
+    for argument in required_args:
+        if argument not in extra_args:
+            extra_args.append(argument)
+
+    config["nuitka"]["extra_args"] = " ".join(extra_args)
+
+    with DEPLOY_SPEC.open("w", encoding="utf-8") as handle:
+        config.write(handle)
+
+    return DEPLOY_SPEC
+
+
 def newest_candidate(patterns: list[str], started_at: float) -> Path:
     candidates: list[Path] = []
     for pattern in patterns:
@@ -69,13 +146,31 @@ def newest_candidate(patterns: list[str], started_at: float) -> Path:
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+def macos_bundle_executable(app: Path) -> Path:
+    info_plist = app / "Contents" / "Info.plist"
+    if not info_plist.is_file():
+        raise SystemExit(f"macOS app bundle is missing {info_plist}")
+
+    with info_plist.open("rb") as handle:
+        metadata = plistlib.load(handle)
+
+    executable_name = metadata.get("CFBundleExecutable")
+    if not executable_name:
+        raise SystemExit("macOS app Info.plist has no CFBundleExecutable value.")
+
+    executable = app / "Contents" / "MacOS" / str(executable_name)
+    if not executable.is_file():
+        raise SystemExit(
+            "macOS app bundle executable declared by Info.plist was not found: "
+            f"{executable}"
+        )
+
+    return executable
+
+
 def smoke_test_native(path: Path, target: str) -> None:
     if target == "macos":
-        binaries = list((path / "Contents" / "MacOS").iterdir())
-        binaries = [candidate for candidate in binaries if candidate.is_file()]
-        if not binaries:
-            raise SystemExit("macOS app bundle contains no executable.")
-        executable = binaries[0]
+        executable = macos_bundle_executable(path)
     else:
         executable = path
 
@@ -228,22 +323,40 @@ def main() -> int:
             "pyside6-deploy was not found. Install the desktop extra first."
         )
 
-    command = [
-        deploy,
-        str(ENTRYPOINT),
-        "-f",
-        "--name",
-        APP_NAME,
-        "--extra-ignore-dirs",
-        ".git,.venv,build,dist,__pycache__",
-    ]
-
     if args.dry_run:
         print("Target:", target)
         print("Architecture:", arch)
         print("Version:", __version__)
-        print("+", " ".join(command))
+        print(
+            "+",
+            " ".join(
+                [
+                    deploy,
+                    str(ENTRYPOINT),
+                    "-f",
+                    "--name",
+                    APP_NAME,
+                    "--extra-ignore-dirs",
+                    IGNORE_DIRS,
+                ]
+            ),
+        )
+        print("Nuitka CI flag: --assume-yes-for-downloads")
         return 0
+
+    ensure_build_prerequisites(target)
+    spec = prepare_deploy_spec(deploy)
+
+    command = [
+        deploy,
+        "-c",
+        str(spec),
+        "-f",
+        "--name",
+        APP_NAME,
+        "--extra-ignore-dirs",
+        IGNORE_DIRS,
+    ]
 
     for stale in [
         ROOT / f"{APP_NAME}.exe",
