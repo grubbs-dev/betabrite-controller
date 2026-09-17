@@ -167,18 +167,34 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             title="BetaBrite Controller",
         )
 
-        self.set_default_size(700, 620)
+        self.set_default_size(820, 720)
+
+        self.selected_color = "Auto"
+        self.selected_speed = 3
+        self.color_buttons = {}
+        self.speed_buttons = {}
 
         outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=18,
+            spacing=16,
         )
         outer.set_margin_top(24)
         outer.set_margin_bottom(24)
-        outer.set_margin_start(24)
-        outer.set_margin_end(24)
-
+        outer.set_margin_start(28)
+        outer.set_margin_end(28)
         self.set_child(outer)
+
+        # Header
+        header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12,
+        )
+
+        header_text = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=2,
+        )
+        header_text.set_hexpand(True)
 
         title = Gtk.Label()
         title.set_markup(
@@ -187,85 +203,137 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             '</span>'
         )
         title.set_xalign(0)
-        outer.append(title)
 
         subtitle = Gtk.Label(
             label="Alpha / BetaBrite 213C"
         )
         subtitle.set_xalign(0)
-        outer.append(subtitle)
+
+        header_text.append(title)
+        header_text.append(subtitle)
+        header.append(header_text)
+
+        self.connection = Gtk.Label()
+        header.append(self.connection)
+
+        outer.append(header)
+
+        separator = Gtk.Separator()
+        outer.append(separator)
 
         # Message
-        message_label = Gtk.Label(label="Message")
-        message_label.set_xalign(0)
-        outer.append(message_label)
+        label = Gtk.Label()
+        label.set_markup('<b>MESSAGE</b>')
+        label.set_xalign(0)
+        outer.append(label)
 
         self.message = Gtk.Entry()
         self.message.set_placeholder_text(
-            "Type the message to display..."
+            "Type a message for the sign..."
         )
         self.message.set_text("BRIEF IN PROGRESS")
+        self.message.set_size_request(-1, 52)
         self.message.connect("activate", self.on_send)
         outer.append(self.message)
 
-        # Color
-        color_label = Gtk.Label(label="Color")
-        color_label.set_xalign(0)
-        outer.append(color_label)
+        # Colors
+        label = Gtk.Label()
+        label.set_markup('<b>COLOR</b>')
+        label.set_xalign(0)
+        outer.append(label)
 
-        self.color = Gtk.DropDown.new_from_strings(
-            list(COLORS.keys())
+        color_grid = Gtk.FlowBox()
+        color_grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        color_grid.set_column_spacing(6)
+        color_grid.set_row_spacing(6)
+        color_grid.set_max_children_per_line(6)
+
+        for name in COLORS:
+            button = Gtk.ToggleButton(label=name)
+            button.connect("clicked", self.on_color, name)
+            self.color_buttons[name] = button
+            color_grid.insert(button, -1)
+
+        self.color_buttons["Auto"].set_active(True)
+        outer.append(color_grid)
+
+        # Mode + special
+        selectors = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=16,
         )
-        self.color.set_selected(0)
-        outer.append(self.color)
 
-        # Mode
-        mode_label = Gtk.Label(label="Display Mode")
+        mode_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6,
+        )
+        mode_box.set_hexpand(True)
+
+        mode_label = Gtk.Label()
+        mode_label.set_markup('<b>DISPLAY MODE</b>')
         mode_label.set_xalign(0)
-        outer.append(mode_label)
 
         self.mode = Gtk.DropDown.new_from_strings(
             list(MODES.keys())
         )
-        self.mode.set_selected(0)
-        outer.append(self.mode)
 
-        # Special
-        special_label = Gtk.Label(label="Special Effect")
+        mode_box.append(mode_label)
+        mode_box.append(self.mode)
+
+        special_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6,
+        )
+        special_box.set_hexpand(True)
+
+        special_label = Gtk.Label()
+        special_label.set_markup('<b>SPECIAL EFFECT</b>')
         special_label.set_xalign(0)
-        outer.append(special_label)
 
         self.special = Gtk.DropDown.new_from_strings(
             list(SPECIALS.keys())
         )
-        self.special.set_selected(0)
-        outer.append(self.special)
+
+        special_box.append(special_label)
+        special_box.append(self.special)
+
+        selectors.append(mode_box)
+        selectors.append(special_box)
+        outer.append(selectors)
 
         # Speed
+        label = Gtk.Label()
+        label.set_markup('<b>SPEED</b>')
+        label.set_xalign(0)
+        outer.append(label)
+
         speed_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=12,
+            spacing=8,
         )
 
-        speed_label = Gtk.Label(label="Speed")
-        speed_row.append(speed_label)
+        for level in range(1, 6):
+            button = Gtk.ToggleButton(label=str(level))
+            button.set_hexpand(True)
+            button.connect(
+                "clicked",
+                self.on_speed,
+                level,
+            )
+            self.speed_buttons[level] = button
+            speed_row.append(button)
 
-        self.speed = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL,
-            1,
-            5,
-            1,
-        )
-        self.speed.set_value(3)
-        self.speed.set_digits(0)
-        self.speed.set_hexpand(True)
-        self.speed.set_draw_value(True)
-
-        speed_row.append(self.speed)
+        self.speed_buttons[3].set_active(True)
         outer.append(speed_row)
 
-        # Options
-        option_row = Gtk.Box(
+        speed_help = Gtk.Label(
+            label="1 = slowest     •     5 = fastest"
+        )
+        speed_help.set_xalign(0)
+        outer.append(speed_help)
+
+        # Formatting
+        options = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=24,
         )
@@ -273,17 +341,18 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         self.flash = Gtk.CheckButton(label="Flash")
         self.wide = Gtk.CheckButton(label="Wide Text")
 
-        option_row.append(self.flash)
-        option_row.append(self.wide)
-
-        outer.append(option_row)
+        options.append(self.flash)
+        options.append(self.wide)
+        outer.append(options)
 
         # Send
         self.send_button = Gtk.Button(
             label="SEND TO SIGN"
         )
-        self.send_button.add_css_class("suggested-action")
-        self.send_button.set_size_request(-1, 54)
+        self.send_button.add_css_class(
+            "suggested-action"
+        )
+        self.send_button.set_size_request(-1, 58)
         self.send_button.connect(
             "clicked",
             self.on_send,
@@ -291,9 +360,10 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         outer.append(self.send_button)
 
         # Presets
-        preset_label = Gtk.Label(label="Quick Presets")
-        preset_label.set_xalign(0)
-        outer.append(preset_label)
+        label = Gtk.Label()
+        label.set_markup('<b>QUICK PRESETS</b>')
+        label.set_xalign(0)
+        outer.append(label)
 
         preset_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -301,36 +371,101 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         )
 
         presets = {
-            "Brief": "BRIEF IN PROGRESS",
-            "Available": "AVAILABLE",
-            "Warning": "WARNING",
-            "Online": "SYSTEM ONLINE",
+            "BRIEF": "BRIEF IN PROGRESS",
+            "AVAILABLE": "AVAILABLE",
+            "WARNING": "WARNING",
+            "ONLINE": "SYSTEM ONLINE",
         }
 
-        for label, text in presets.items():
-            button = Gtk.Button(label=label)
+        for button_text, message in presets.items():
+            button = Gtk.Button(label=button_text)
+            button.set_hexpand(True)
             button.connect(
                 "clicked",
                 self.on_preset,
-                text,
+                message,
             )
             preset_row.append(button)
 
         outer.append(preset_row)
 
-        # Status
-        separator = Gtk.Separator()
-        outer.append(separator)
+        # Footer
+        footer_sep = Gtk.Separator()
+        outer.append(footer_sep)
 
-        self.status = Gtk.Label(
-            label=f"Ready • {PORT}"
+        footer = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12,
         )
+
+        self.status = Gtk.Label()
         self.status.set_xalign(0)
-        outer.append(self.status)
+        self.status.set_hexpand(True)
+
+        refresh = Gtk.Button(
+            label="Refresh Connection"
+        )
+        refresh.connect(
+            "clicked",
+            self.on_refresh,
+        )
+
+        footer.append(self.status)
+        footer.append(refresh)
+        outer.append(footer)
+
+        self.refresh_connection()
 
     def dropdown_text(self, dropdown):
         item = dropdown.get_selected_item()
         return item.get_string()
+
+    def refresh_connection(self):
+        from pathlib import Path
+
+        if Path(PORT).exists():
+            self.connection.set_markup(
+                '<span weight="bold">● CONNECTED</span>'
+            )
+            self.status.set_text(
+                f"Device ready: {PORT}"
+            )
+            self.send_button.set_sensitive(True)
+        else:
+            self.connection.set_markup(
+                '<span weight="bold">● DISCONNECTED</span>'
+            )
+            self.status.set_text(
+                f"Device not found: {PORT}"
+            )
+            self.send_button.set_sensitive(False)
+
+    def on_refresh(self, button):
+        self.refresh_connection()
+
+    def on_color(self, button, name):
+        if not button.get_active():
+            if self.selected_color == name:
+                button.set_active(True)
+            return
+
+        self.selected_color = name
+
+        for other_name, other_button in self.color_buttons.items():
+            if other_name != name:
+                other_button.set_active(False)
+
+    def on_speed(self, button, level):
+        if not button.get_active():
+            if self.selected_speed == level:
+                button.set_active(True)
+            return
+
+        self.selected_speed = level
+
+        for other_level, other_button in self.speed_buttons.items():
+            if other_level != level:
+                other_button.set_active(False)
 
     def on_preset(self, button, text):
         self.message.set_text(text)
@@ -344,17 +479,16 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
             )
             return
 
-        selected_color = self.dropdown_text(
-            self.color
-        )
+        self.refresh_connection()
+
+        if not self.send_button.get_sensitive():
+            return
+
         selected_mode = self.dropdown_text(
             self.mode
         )
         selected_special = self.dropdown_text(
             self.special
-        )
-        selected_speed = int(
-            round(self.speed.get_value())
         )
 
         self.send_button.set_sensitive(False)
@@ -363,10 +497,10 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
         try:
             send_to_sign(
                 message=message,
-                selected_color=selected_color,
+                selected_color=self.selected_color,
                 selected_mode=selected_mode,
                 selected_special=selected_special,
-                selected_speed=selected_speed,
+                selected_speed=self.selected_speed,
                 flash=self.flash.get_active(),
                 wide=self.wide.get_active(),
             )
@@ -377,11 +511,11 @@ class BetaBriteWindow(Gtk.ApplicationWindow):
 
         except Exception as exc:
             self.status.set_text(
-                f"Error: {exc}"
+                f"Send failed: {exc}"
             )
 
         finally:
-            self.send_button.set_sensitive(True)
+            self.refresh_connection()
 
 
 class BetaBriteApp(Gtk.Application):
