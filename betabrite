@@ -1,0 +1,258 @@
+#!/opt/betabrite/venv/bin/python
+
+import argparse
+import sys
+
+from alphasign import (
+    Sign,
+    SignType,
+    Packet,
+    WriteText,
+    DisplayMode,
+    DisplayPosition,
+    SpecialMode,
+    Color,
+    color,
+    speed,
+    CTRL_FLASH_ON,
+    CTRL_FLASH_OFF,
+    CTRL_WIDE_ON,
+    CTRL_WIDE_OFF,
+)
+
+PORT = "/dev/ttyUSB0"
+
+COLORS = {
+    "red": Color.RED,
+    "green": Color.GREEN,
+    "amber": Color.AMBER,
+    "yellow": Color.YELLOW,
+    "orange": Color.ORANGE,
+    "brown": Color.BROWN,
+    "dim-red": Color.DIM_RED,
+    "dim-green": Color.DIM_GREEN,
+    "rainbow1": Color.RAINBOW1,
+    "rainbow2": Color.RAINBOW2,
+    "mix": Color.MIX,
+    "auto": Color.AUTO,
+}
+
+MODES = {
+    "rotate": DisplayMode.ROTATE,
+    "hold": DisplayMode.HOLD,
+    "flash": DisplayMode.FLASH,
+    "roll-up": DisplayMode.ROLL_UP,
+    "roll-down": DisplayMode.ROLL_DOWN,
+    "roll-left": DisplayMode.ROLL_LEFT,
+    "roll-right": DisplayMode.ROLL_RIGHT,
+    "wipe-up": DisplayMode.WIPE_UP,
+    "wipe-down": DisplayMode.WIPE_DOWN,
+    "wipe-left": DisplayMode.WIPE_LEFT,
+    "wipe-right": DisplayMode.WIPE_RIGHT,
+    "scroll": DisplayMode.SCROLL,
+    "automode": DisplayMode.AUTOMODE,
+    "compressed-rotate": DisplayMode.COMPRESSED_ROTATE,
+    "roll-in": DisplayMode.ROLL_IN,
+    "roll-out": DisplayMode.ROLL_OUT,
+    "wipe-in": DisplayMode.WIPE_IN,
+    "wipe-out": DisplayMode.WIPE_OUT,
+}
+
+SPECIALS = {
+    "twinkle": SpecialMode.TWINKLE,
+    "sparkle": SpecialMode.SPARKLE,
+    "snow": SpecialMode.SNOW,
+    "interlock": SpecialMode.INTERLOCK,
+    "switch": SpecialMode.SWITCH,
+    "spray": SpecialMode.SPRAY,
+    "starburst": SpecialMode.STARBURST,
+    "welcome": SpecialMode.WELCOME,
+    "slot-machine": SpecialMode.SLOT_MACHINE,
+    "news-flash": SpecialMode.NEWS_FLASH,
+    "trumpet": SpecialMode.TRUMPET,
+    "cycle-colors": SpecialMode.CYCLE_COLORS,
+    "thank-you": SpecialMode.THANK_YOU,
+    "no-smoking": SpecialMode.NO_SMOKING,
+    "dont-drink-drive": SpecialMode.DONT_DRINK_DRIVE,
+    "running-animal": SpecialMode.RUNNING_ANIMAL,
+    "fireworks": SpecialMode.FIREWORKS,
+    "turbocar": SpecialMode.TURBOCAR,
+    "cherry-bomb": SpecialMode.CHERRY_BOMB,
+}
+
+parser = argparse.ArgumentParser(
+    prog="betabrite",
+    description="Control the Alpha/BetaBrite 213C LED display."
+)
+
+parser.add_argument(
+    "message",
+    nargs="*",
+    help="Message to display"
+)
+
+parser.add_argument(
+    "-c", "--color",
+    choices=COLORS,
+    default="auto",
+    help="Text color (default: auto)"
+)
+
+parser.add_argument(
+    "-m", "--mode",
+    choices=MODES,
+    default="rotate",
+    help="Display mode (default: rotate)"
+)
+
+parser.add_argument(
+    "--special",
+    choices=SPECIALS,
+    help="Use a BetaBrite special animation"
+)
+
+parser.add_argument(
+    "--flash",
+    action="store_true",
+    help="Flash the message text"
+)
+
+parser.add_argument(
+    "--wide",
+    action="store_true",
+    help="Use wide characters"
+)
+
+parser.add_argument(
+    "--speed",
+    type=int,
+    choices=range(1, 6),
+    metavar="1-5",
+    help="Display speed: 1=slowest, 5=fastest"
+)
+
+parser.add_argument(
+    "--port",
+    default=PORT,
+    help=f"Serial port (default: {PORT})"
+)
+
+parser.add_argument(
+    "--list-colors",
+    action="store_true",
+    help="List available colors"
+)
+
+parser.add_argument(
+    "--list-modes",
+    action="store_true",
+    help="List available display modes"
+)
+
+parser.add_argument(
+    "--list-special",
+    action="store_true",
+    help="List special animations"
+)
+
+args = parser.parse_args()
+
+if args.list_colors:
+    print("\nAvailable colors:")
+    for name in COLORS:
+        print(f"  {name}")
+    sys.exit(0)
+
+if args.list_modes:
+    print("\nAvailable modes:")
+    for name in MODES:
+        print(f"  {name}")
+    sys.exit(0)
+
+if args.list_special:
+    print("\nAvailable special animations:")
+    for name in SPECIALS:
+        print(f"  {name}")
+    sys.exit(0)
+
+if not args.message and not args.special:
+    parser.print_help()
+    sys.exit(1)
+
+message = " ".join(args.message)
+
+# Build formatted message as bytes.
+content = b""
+
+if args.color:
+    content += color(COLORS[args.color])
+
+if args.speed is not None:
+    content += speed(args.speed)
+
+if args.wide:
+    content += CTRL_WIDE_ON
+
+if args.flash:
+    content += CTRL_FLASH_ON
+
+content += message.encode("ascii", errors="replace")
+
+if args.flash:
+    content += CTRL_FLASH_OFF
+
+if args.wide:
+    content += CTRL_WIDE_OFF
+
+if args.special:
+    display_mode = DisplayMode.SPECIAL
+    special_mode = SPECIALS[args.special]
+else:
+    display_mode = MODES[args.mode]
+    special_mode = None
+
+sign = Sign(
+    sign_type=SignType.ALL,
+    address="00"
+)
+
+try:
+    sign.open(
+        args.port,
+        baudrate=9600,
+        bytesize=7,
+        parity="E",
+        stopbits=1,
+        timeout=1,
+        dtr=False
+    )
+
+    packet = Packet(
+        type_code=b"Z",
+        address="00"
+    )
+
+    packet.add(
+        WriteText(
+            content,
+            label="A",
+            position=DisplayPosition.FILL,
+            mode=display_mode,
+            special_mode=special_mode
+        )
+    )
+
+    sign.send(packet)
+
+except Exception as exc:
+    print(f"BetaBrite error: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+finally:
+    try:
+        sign.close()
+    except Exception:
+        pass
+
+description = message if message else args.special
+print(f'BetaBrite: "{description}"')
