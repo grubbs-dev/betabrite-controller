@@ -8,6 +8,11 @@ The project uses semantic versioning for public releases.
 
 ### Added
 
+- Native desktop build automation using Qt for Python `pyside6-deploy` / Nuitka
+- Platform-native development artifacts for Windows, macOS, and Linux
+- Windows Inno Setup installer generation in native build CI
+- macOS development `.dmg` packaging
+- SHA-256 manifests for native desktop artifacts
 - Portable PySide6 / Qt 6 desktop foundation for Windows, macOS, and Linux
 - Full portable Qt message composer with colors, display modes, special effects, speed, flash, wide text, and quick presets
 - READY-gated physical transmission from the portable Qt application through the shared controller backend

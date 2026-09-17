@@ -1,0 +1,93 @@
+name: Native Desktop
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-native:
+    name: Native desktop / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Linux deployment dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+
+      - name: Install desktop build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[desktop]"
+
+      - name: Dry-run native deployment
+        run: python scripts/build-native.py --dry-run
+
+      - name: Build native desktop artifact
+        run: python scripts/build-native.py
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          $version = python -c "from betabrite_controller import __version__; print(__version__)"
+          $app = Get-ChildItem "dist/native/betabrite-controller-*-windows-x86_64.exe" |
+            Where-Object { $_.Name -notmatch "-setup" } |
+            Select-Object -First 1
+          if (-not $app) { throw "Native Windows executable not found." }
+          $output = (Resolve-Path "dist/native").Path
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc `
+            "/DAppVersion=$version" `
+            "/DAppExe=$($app.FullName)" `
+            "/DOutputDir=$output" `
+            "packaging/windows/betabrite-controller.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Refresh Windows checksums
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $checksum = "dist/native/SHA256SUMS-windows"
+          $files = Get-ChildItem "dist/native" -File |
+            Where-Object { $_.Name -ne "SHA256SUMS-windows" } |
+            Sort-Object Name
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($file.Name)"
+          }
+          Set-Content -Path $checksum -Value $lines -Encoding ascii
+
+      - name: List native artifacts
+        shell: bash
+        run: |
+          ls -lah dist/native
+          cat dist/native/SHA256SUMS-*
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ runner.os }}-${{ runner.arch }}
+          path: dist/native/*
+          if-no-files-found: error
