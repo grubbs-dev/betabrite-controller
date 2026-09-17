@@ -1,0 +1,399 @@
+#!/usr/bin/python3
+
+import gi
+gi.require_version("Gtk", "4.0")
+
+from gi.repository import Gtk
+
+from alphasign import (
+    Sign,
+    SignType,
+    Packet,
+    WriteText,
+    DisplayMode,
+    DisplayPosition,
+    SpecialMode,
+    Color,
+    color,
+    speed,
+    CTRL_FLASH_ON,
+    CTRL_FLASH_OFF,
+    CTRL_WIDE_ON,
+    CTRL_WIDE_OFF,
+)
+
+PORT = "/dev/ttyUSB0"
+
+COLORS = {
+    "Auto": Color.AUTO,
+    "Red": Color.RED,
+    "Green": Color.GREEN,
+    "Amber": Color.AMBER,
+    "Yellow": Color.YELLOW,
+    "Orange": Color.ORANGE,
+    "Brown": Color.BROWN,
+    "Dim Red": Color.DIM_RED,
+    "Dim Green": Color.DIM_GREEN,
+    "Rainbow 1": Color.RAINBOW1,
+    "Rainbow 2": Color.RAINBOW2,
+    "Mix": Color.MIX,
+}
+
+MODES = {
+    "Rotate": DisplayMode.ROTATE,
+    "Hold": DisplayMode.HOLD,
+    "Scroll": DisplayMode.SCROLL,
+    "Compressed Rotate": DisplayMode.COMPRESSED_ROTATE,
+    "Roll Left": DisplayMode.ROLL_LEFT,
+    "Roll Right": DisplayMode.ROLL_RIGHT,
+    "Roll Up": DisplayMode.ROLL_UP,
+    "Roll Down": DisplayMode.ROLL_DOWN,
+    "Roll In": DisplayMode.ROLL_IN,
+    "Roll Out": DisplayMode.ROLL_OUT,
+    "Wipe Left": DisplayMode.WIPE_LEFT,
+    "Wipe Right": DisplayMode.WIPE_RIGHT,
+    "Wipe Up": DisplayMode.WIPE_UP,
+    "Wipe Down": DisplayMode.WIPE_DOWN,
+    "Wipe In": DisplayMode.WIPE_IN,
+    "Wipe Out": DisplayMode.WIPE_OUT,
+    "Automode": DisplayMode.AUTOMODE,
+}
+
+SPECIALS = {
+    "None": None,
+    "Twinkle": SpecialMode.TWINKLE,
+    "Sparkle": SpecialMode.SPARKLE,
+    "Snow": SpecialMode.SNOW,
+    "Interlock": SpecialMode.INTERLOCK,
+    "Switch": SpecialMode.SWITCH,
+    "Spray": SpecialMode.SPRAY,
+    "Starburst": SpecialMode.STARBURST,
+    "Welcome": SpecialMode.WELCOME,
+    "Slot Machine": SpecialMode.SLOT_MACHINE,
+    "News Flash": SpecialMode.NEWS_FLASH,
+    "Trumpet": SpecialMode.TRUMPET,
+    "Cycle Colors": SpecialMode.CYCLE_COLORS,
+    "Thank You": SpecialMode.THANK_YOU,
+    "No Smoking": SpecialMode.NO_SMOKING,
+    "Don't Drink & Drive": SpecialMode.DONT_DRINK_DRIVE,
+    "Running Animal": SpecialMode.RUNNING_ANIMAL,
+    "Fireworks": SpecialMode.FIREWORKS,
+    "Turbocar": SpecialMode.TURBOCAR,
+    "Cherry Bomb": SpecialMode.CHERRY_BOMB,
+}
+
+
+def send_to_sign(
+    message,
+    selected_color,
+    selected_mode,
+    selected_special,
+    selected_speed,
+    flash,
+    wide,
+):
+    content = b""
+
+    content += color(COLORS[selected_color])
+    content += speed(selected_speed)
+
+    if wide:
+        content += CTRL_WIDE_ON
+
+    if flash:
+        content += CTRL_FLASH_ON
+
+    content += message.encode("ascii", errors="replace")
+
+    if flash:
+        content += CTRL_FLASH_OFF
+
+    if wide:
+        content += CTRL_WIDE_OFF
+
+    special = SPECIALS[selected_special]
+
+    if special is not None:
+        display_mode = DisplayMode.SPECIAL
+        special_mode = special
+    else:
+        display_mode = MODES[selected_mode]
+        special_mode = None
+
+    sign = Sign(
+        sign_type=SignType.ALL,
+        address="00",
+    )
+
+    try:
+        sign.open(
+            PORT,
+            baudrate=9600,
+            bytesize=7,
+            parity="E",
+            stopbits=1,
+            timeout=1,
+            dtr=False,
+        )
+
+        packet = Packet(
+            type_code=b"Z",
+            address="00",
+        )
+
+        packet.add(
+            WriteText(
+                content,
+                label="A",
+                position=DisplayPosition.FILL,
+                mode=display_mode,
+                special_mode=special_mode,
+            )
+        )
+
+        sign.send(packet)
+
+    finally:
+        try:
+            sign.close()
+        except Exception:
+            pass
+
+
+class BetaBriteWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(
+            application=app,
+            title="BetaBrite Controller",
+        )
+
+        self.set_default_size(700, 620)
+
+        outer = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=18,
+        )
+        outer.set_margin_top(24)
+        outer.set_margin_bottom(24)
+        outer.set_margin_start(24)
+        outer.set_margin_end(24)
+
+        self.set_child(outer)
+
+        title = Gtk.Label()
+        title.set_markup(
+            '<span size="xx-large" weight="bold">'
+            'BetaBrite Controller'
+            '</span>'
+        )
+        title.set_xalign(0)
+        outer.append(title)
+
+        subtitle = Gtk.Label(
+            label="Alpha / BetaBrite 213C"
+        )
+        subtitle.set_xalign(0)
+        outer.append(subtitle)
+
+        # Message
+        message_label = Gtk.Label(label="Message")
+        message_label.set_xalign(0)
+        outer.append(message_label)
+
+        self.message = Gtk.Entry()
+        self.message.set_placeholder_text(
+            "Type the message to display..."
+        )
+        self.message.set_text("BRIEF IN PROGRESS")
+        self.message.connect("activate", self.on_send)
+        outer.append(self.message)
+
+        # Color
+        color_label = Gtk.Label(label="Color")
+        color_label.set_xalign(0)
+        outer.append(color_label)
+
+        self.color = Gtk.DropDown.new_from_strings(
+            list(COLORS.keys())
+        )
+        self.color.set_selected(0)
+        outer.append(self.color)
+
+        # Mode
+        mode_label = Gtk.Label(label="Display Mode")
+        mode_label.set_xalign(0)
+        outer.append(mode_label)
+
+        self.mode = Gtk.DropDown.new_from_strings(
+            list(MODES.keys())
+        )
+        self.mode.set_selected(0)
+        outer.append(self.mode)
+
+        # Special
+        special_label = Gtk.Label(label="Special Effect")
+        special_label.set_xalign(0)
+        outer.append(special_label)
+
+        self.special = Gtk.DropDown.new_from_strings(
+            list(SPECIALS.keys())
+        )
+        self.special.set_selected(0)
+        outer.append(self.special)
+
+        # Speed
+        speed_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12,
+        )
+
+        speed_label = Gtk.Label(label="Speed")
+        speed_row.append(speed_label)
+
+        self.speed = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL,
+            1,
+            5,
+            1,
+        )
+        self.speed.set_value(3)
+        self.speed.set_digits(0)
+        self.speed.set_hexpand(True)
+        self.speed.set_draw_value(True)
+
+        speed_row.append(self.speed)
+        outer.append(speed_row)
+
+        # Options
+        option_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=24,
+        )
+
+        self.flash = Gtk.CheckButton(label="Flash")
+        self.wide = Gtk.CheckButton(label="Wide Text")
+
+        option_row.append(self.flash)
+        option_row.append(self.wide)
+
+        outer.append(option_row)
+
+        # Send
+        self.send_button = Gtk.Button(
+            label="SEND TO SIGN"
+        )
+        self.send_button.add_css_class("suggested-action")
+        self.send_button.set_size_request(-1, 54)
+        self.send_button.connect(
+            "clicked",
+            self.on_send,
+        )
+        outer.append(self.send_button)
+
+        # Presets
+        preset_label = Gtk.Label(label="Quick Presets")
+        preset_label.set_xalign(0)
+        outer.append(preset_label)
+
+        preset_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8,
+        )
+
+        presets = {
+            "Brief": "BRIEF IN PROGRESS",
+            "Available": "AVAILABLE",
+            "Warning": "WARNING",
+            "Online": "SYSTEM ONLINE",
+        }
+
+        for label, text in presets.items():
+            button = Gtk.Button(label=label)
+            button.connect(
+                "clicked",
+                self.on_preset,
+                text,
+            )
+            preset_row.append(button)
+
+        outer.append(preset_row)
+
+        # Status
+        separator = Gtk.Separator()
+        outer.append(separator)
+
+        self.status = Gtk.Label(
+            label=f"Ready • {PORT}"
+        )
+        self.status.set_xalign(0)
+        outer.append(self.status)
+
+    def dropdown_text(self, dropdown):
+        item = dropdown.get_selected_item()
+        return item.get_string()
+
+    def on_preset(self, button, text):
+        self.message.set_text(text)
+
+    def on_send(self, *args):
+        message = self.message.get_text().strip()
+
+        if not message:
+            self.status.set_text(
+                "Enter a message before sending."
+            )
+            return
+
+        selected_color = self.dropdown_text(
+            self.color
+        )
+        selected_mode = self.dropdown_text(
+            self.mode
+        )
+        selected_special = self.dropdown_text(
+            self.special
+        )
+        selected_speed = int(
+            round(self.speed.get_value())
+        )
+
+        self.send_button.set_sensitive(False)
+        self.status.set_text("Sending...")
+
+        try:
+            send_to_sign(
+                message=message,
+                selected_color=selected_color,
+                selected_mode=selected_mode,
+                selected_special=selected_special,
+                selected_speed=selected_speed,
+                flash=self.flash.get_active(),
+                wide=self.wide.get_active(),
+            )
+
+            self.status.set_text(
+                f'Sent: "{message}"'
+            )
+
+        except Exception as exc:
+            self.status.set_text(
+                f"Error: {exc}"
+            )
+
+        finally:
+            self.send_button.set_sensitive(True)
+
+
+class BetaBriteApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="dev.grubbs.BetaBriteController"
+        )
+
+    def do_activate(self):
+        window = BetaBriteWindow(self)
+        window.present()
+
+
+app = BetaBriteApp()
+app.run()
