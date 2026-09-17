@@ -9,6 +9,10 @@ The project uses semantic versioning for public releases.
 ### Added
 
 - Portable PySide6 / Qt 6 desktop foundation for Windows, macOS, and Linux
+- Full portable Qt message composer with colors, display modes, special effects, speed, flash, wide text, and quick presets
+- READY-gated physical transmission from the portable Qt application through the shared controller backend
+- Passive adapter monitoring that preserves READY only after a successful active probe on the same port
+- Toolkit-independent message-draft validation and transmit-state tests
 - `betabrite-desktop` application entry point
 - Cross-platform adapter selection, remember/forget controls, and active connection status in the portable window
 - Toolkit-independent desktop adapter presentation model and unit tests
@@ -19,6 +23,7 @@ The project uses semantic versioning for public releases.
 
 - Development package version advanced to `1.2.0.dev0`
 - GitHub Actions checkout/setup-python actions moved to their current Node 24 generation
+- Portable Qt controls now source color, mode, special-effect, and transmission behavior from the shared backend
 
 ### Notes
 
