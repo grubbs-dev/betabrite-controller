@@ -35,17 +35,25 @@ copy_exec() {
 
 copy_file README.md
 copy_file CHANGELOG.md
+copy_file CONTRIBUTING.md
+copy_file .gitignore
 copy_file requirements.txt
 copy_file pyproject.toml
 copy_file INSTALL-BETABRITE.desktop
 copy_exec install.sh
 copy_exec uninstall.sh
+copy_exec test.sh
 copy_exec betabrite
 copy_exec betabrite-gui
+copy_exec betabrite_desktop.py
 
 cp -a "$ROOT/betabrite_controller" "$STAGE/"
+cp -a "$ROOT/.github" "$STAGE/"
+cp -a "$ROOT/assets" "$STAGE/"
 cp -a "$ROOT/packaging" "$STAGE/"
 cp -a "$ROOT/docs" "$STAGE/"
+cp -a "$ROOT/scripts" "$STAGE/"
+cp -a "$ROOT/tests" "$STAGE/"
 
 find "$STAGE" -type d \( -name __pycache__ -o -name '*.egg-info' \) -prune -exec rm -rf {} +
 find "$STAGE" -type f -name '*.pyc' -delete
