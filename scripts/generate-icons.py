@@ -157,8 +157,43 @@ def generate(root: Path) -> tuple[Path, ...]:
     return output_paths(root)
 
 
+def same_rendered_asset(expected: Path, actual: Path) -> bool:
+    """Compare decoded pixels so platform zlib encoders do not cause drift."""
+    if expected.suffix == ".svg":
+        return expected.read_bytes() == actual.read_bytes()
+
+    with Image.open(expected) as committed, Image.open(actual) as generated:
+        if committed.format != generated.format:
+            return False
+        if committed.format == "ICO":
+            committed_sizes = committed.ico.sizes()
+            generated_sizes = generated.ico.sizes()
+            if committed_sizes != generated_sizes:
+                return False
+            return all(
+                committed.ico.getimage(size).convert("RGBA").tobytes()
+                == generated.ico.getimage(size).convert("RGBA").tobytes()
+                for size in committed_sizes
+            )
+        if committed.format == "ICNS":
+            committed_sizes = set(committed.icns.itersizes())
+            generated_sizes = set(generated.icns.itersizes())
+            if committed_sizes != generated_sizes:
+                return False
+            return all(
+                committed.icns.getimage(size).convert("RGBA").tobytes()
+                == generated.icns.getimage(size).convert("RGBA").tobytes()
+                for size in committed_sizes
+            )
+        return (
+            committed.size == generated.size
+            and committed.convert("RGBA").tobytes()
+            == generated.convert("RGBA").tobytes()
+        )
+
+
 def check(root: Path) -> bool:
-    """Return whether committed assets match a fresh generation exactly."""
+    """Return whether committed assets match a fresh generation visually."""
     with tempfile.TemporaryDirectory(prefix="betabrite-icons-") as temporary:
         generated_root = Path(temporary)
         generate(generated_root)
@@ -166,7 +201,7 @@ def check(root: Path) -> bool:
         for expected in output_paths(root):
             relative = expected.relative_to(root)
             actual = generated_root / relative
-            if not expected.is_file() or expected.read_bytes() != actual.read_bytes():
+            if not expected.is_file() or not same_rendered_asset(expected, actual):
                 mismatches.append(str(relative))
 
     if mismatches:
