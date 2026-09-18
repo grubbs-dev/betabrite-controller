@@ -4,17 +4,22 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-09-17
 
 ### Added
 
 - Native desktop build automation using Qt for Python `pyside6-deploy` / Nuitka
-- Platform-native development artifacts for Windows, macOS, and Linux
-- Windows Inno Setup installer generation in native build CI
-- macOS development `.dmg` packaging
-- SHA-256 manifests for native desktop artifacts
+- Platform-native Windows, macOS, and Linux applications that bundle Python and Qt
+- Per-user Windows Inno Setup installer with Start Menu and optional desktop shortcuts
+- macOS application ZIP and DMG with stable bundle metadata and Applications shortcut
+- Linux standalone binary and portable tar package with AppRun and per-user desktop integration
+- Original BetaBrite Controller SVG branding with deterministic PNG, ICO, and ICNS generation
+- Application branding across the Qt window, native executables, installers, app bundle, and Linux desktop entry
+- Conditional Windows Authenticode and macOS Developer ID/notarization hooks
+- Platform-specific and combined SHA-256 manifests for release artifacts
+- Tagged release orchestration for source, Python, Windows, macOS, and Linux outputs
 - Native-build hardening for noninteractive Nuitka downloads, Fedora Python headers, and macOS bundle executable discovery
-- Portable PySide6 / Qt 6 desktop foundation for Windows, macOS, and Linux
+- Portable PySide6 / Qt 6 desktop controller for Windows, macOS, and Linux
 - Full portable Qt message composer with colors, display modes, special effects, speed, flash, wide text, and quick presets
 - READY-gated physical transmission from the portable Qt application through the shared controller backend
 - Passive adapter monitoring that preserves READY only after a successful active probe on the same port
@@ -27,14 +32,18 @@ The project uses semantic versioning for public releases.
 
 ### Changed
 
-- Development package version advanced to `1.2.0.dev0`
+- Package version finalized as `1.2.0`
 - GitHub Actions checkout/setup-python actions moved to their current Node 24 generation
 - Portable Qt controls now source color, mode, special-effect, and transmission behavior from the shared backend
+- Native CI now smoke-tests both the raw compiled application and its packaged form
+- Windows installation now defaults to the current user and preserves user settings on uninstall
 
 ### Notes
 
-- The GTK4 desktop application remains the Fedora reference UI during the portable GUI migration.
-- Portable desktop CI validates the application runtime, but physical Windows/macOS BetaBrite hardware validation is still pending.
+- The GTK4 desktop application and Fedora installer remain available as compatibility/reference paths.
+- Physical hardware validation is primarily Fedora/Linux using a BetaBrite 213C-1 Series B, DSD TECH SH-RJ12C, and Prolific PL2303GT (`067b:23a3`) at 9600/7E1.
+- Windows/macOS native CI validates compiled and packaged startup, not physical sign behavior.
+- Windows and macOS artifacts are clearly labeled unsigned until commercial signing credentials are configured.
 
 ## [1.1.0] - 2026-09-17
 

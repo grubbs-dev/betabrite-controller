@@ -14,7 +14,7 @@ For the physically tested DSD TECH / PL2303GT adapter, look for USB ID:
 067b:23a3
 ```
 
-The tested adapter is marked with `*`.
+The tested adapter is marked as `tested`.
 
 If no ports are listed, the operating system is not currently exposing the USB adapter as a serial device. Check the cable, USB connection, and any required chipset driver.
 
@@ -131,6 +131,16 @@ Check the required packages:
 ```bash
 rpm -q python3 python3-pip python3-gobject gtk4
 ```
+
+## Native desktop package does not start
+
+Run the package's headless check from a terminal. Use the executable name supplied for your platform, for example:
+
+```bash
+./BetaBriteController.bin --smoke-test
+```
+
+Windows and macOS downloads containing `-unsigned` in their filename do not yet carry commercial signing identities. The operating system may require an explicit first-launch confirmation. Verify the file against the release `SHA256SUMS` manifest before proceeding.
 
 ## Tests
 

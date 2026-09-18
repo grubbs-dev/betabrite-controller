@@ -51,7 +51,7 @@ With the controller core installed, run:
 betabrite --list-ports
 ```
 
-The tested adapter is marked with `*`.
+The tested adapter is marked as `tested`.
 
 If multiple USB serial adapters are connected, select the BetaBrite adapter explicitly:
 

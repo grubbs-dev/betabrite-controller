@@ -1,42 +1,63 @@
+<p align="center">
+  <img src="assets/icons/betabrite-controller-128.png" width="96" height="96" alt="BetaBrite Controller icon">
+</p>
+
 # BetaBrite Controller
 
 **Legacy sign. Modern control.**
 
-BetaBrite Controller is a controller for classic Alpha/BetaBrite LED signs. The controller core and command-line interface are designed to work on Windows, macOS, and Linux. The current GTK4 desktop GUI remains Linux/Fedora-specific while the portable desktop application is being built.
+BetaBrite Controller 1.2.0 is a cross-platform desktop and command-line controller for classic Alpha/BetaBrite serial LED signs. The native Windows, macOS, and Linux applications bundle Python, Qt, and their runtime dependencies; normal desktop users do not need Python, pip, Git, or Qt.
 
 [![CI](https://github.com/grubbs-dev/betabrite-controller/actions/workflows/ci.yml/badge.svg)](https://github.com/grubbs-dev/betabrite-controller/actions/workflows/ci.yml)
+[![Native Desktop](https://github.com/grubbs-dev/betabrite-controller/actions/workflows/native-desktop.yml/badge.svg)](https://github.com/grubbs-dev/betabrite-controller/actions/workflows/native-desktop.yml)
 [![Latest release](https://img.shields.io/github/v/release/grubbs-dev/betabrite-controller?display_name=tag)](https://github.com/grubbs-dev/betabrite-controller/releases/latest)
-[![Core platforms](https://img.shields.io/badge/core-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#platform-support)
+
+## Download and install
+
+Download the current files from [GitHub Releases](https://github.com/grubbs-dev/betabrite-controller/releases/latest).
+
+| Platform | Recommended download | Other portable download |
+| --- | --- | --- |
+| Windows x64 | `betabrite-controller-1.2.0-windows-x86_64-unsigned-setup.exe` | `.zip` or standalone `.exe` |
+| macOS Apple silicon | `betabrite-controller-1.2.0-macos-arm64-unsigned.dmg` | `.zip` containing `BetaBrite Controller.app` |
+| Linux x64 | `betabrite-controller-1.2.0-linux-x86_64.tar.gz` | standalone `.bin` |
+
+Windows installs per user under the normal local application directory, creates a Start Menu shortcut, offers an optional desktop shortcut, and does not normally request administrator privileges. The macOS DMG provides the application alongside an Applications shortcut. The Linux archive can run directly through `AppRun`; `install-desktop.sh` adds a per-user application-menu entry without root access.
+
+Windows and macOS files with `-unsigned` in their name were built and tested by GitHub Actions but do not carry commercial platform signing identities. Windows SmartScreen and macOS Gatekeeper may therefore warn before first launch. The project has conditional signing and notarization support ready for use when credentials are available; see [Packaging and distribution](docs/packaging.md).
+
+The existing Fedora GTK4 installer remains available as a compatibility/reference path:
+
+```bash
+bash install.sh
+```
+
+It installs the Fedora-specific GTK application, udev rule, and serial group configuration. It has not been removed or replaced by the portable Qt package.
 
 ## What it does
 
-BetaBrite Controller sends custom messages, colors, display modes, speeds, formatting, and built-in special effects to supported Alpha/BetaBrite serial LED signs.
+- Discovers serial adapters on Windows, macOS, and Linux
+- Prefers the physically tested Prolific PL2303GT adapter automatically
+- Remembers a selected USB adapter by stable USB identity
+- Reports clear READY, missing, busy, permission, and transport-failure states
+- Composes messages with colors, display modes, special effects, speed 1–5, flash, and wide text
+- Sends through the shared `BetaBriteController` backend from the Qt GUI, GTK GUI, or CLI
+- Provides quick presets and active connection checks
+- Operates locally without telemetry or a network requirement
 
-The project currently includes:
+READY means the selected serial transport opened successfully. A successful send means bytes were transmitted without a transport error. Neither state means the physical sign acknowledged the message; this protocol path is effectively one-way.
 
-- Cross-platform serial discovery for Windows, macOS, and Linux
-- Automatic detection of the physically tested PL2303GT USB serial adapter
-- Command-line controller for messages, effects, automation, and diagnostics
-- Persistent per-user USB adapter selection with stable USB identity matching
-- Active serial connection checks with customer-friendly error states
-- Portable PySide6 / Qt desktop controller for Windows, macOS, and Linux
-- GTK4 desktop controller for Fedora Linux using the same connection-state backend
-- Fedora one-click installer with udev and serial-permission setup
-- Hardware and wiring documentation for the tested sign/adapter combination
-- Automated tests across Windows, macOS, and Linux
-
-## Platform support
+## Platform status
 
 | Component | Windows | macOS | Linux |
 | --- | :---: | :---: | :---: |
-| Controller backend | ✓ | ✓ | ✓ |
-| Serial auto-discovery | ✓ | ✓ | ✓ |
-| Command-line interface | ✓ | ✓ | ✓ |
-| Portable Qt GUI (development) | CI | CI | CI |
-| Current GTK4 GUI | — | — | ✓ |
-| Current one-click installer | — | — | Fedora |
+| Controller backend and CLI | CI | CI | CI + hardware |
+| Portable Qt desktop | CI | CI | CI + hardware |
+| Native portable application | CI | CI | CI + local launch |
+| Installer/package | Inno Setup | DMG | tar.gz + desktop integration |
+| Legacy GTK4 application | — | — | Fedora |
 
-The portable Qt GUI is now under active 1.2 development. The controller surface and runtime are CI-tested on Windows, macOS, and Linux; physical BetaBrite validation remains centered on Fedora until the same hardware path is exercised on Windows and macOS and native packaging is complete.
+CI validates the compiled application and packaged smoke path independently on each operating system. Physical BetaBrite hardware validation is primarily on Fedora/Linux; a green Windows or macOS build is not a claim of physical sign testing on that platform.
 
 ## Tested hardware
 
@@ -47,206 +68,66 @@ The physically tested configuration is:
 - **USB chipset:** Prolific PL2303GT (`067b:23a3`)
 - **Serial settings:** 9600 baud, 7 data bits, even parity, 1 stop bit
 
-Other compatible Alpha/BetaBrite signs and USB serial adapters may work, but should be treated as unverified until physically tested.
+Other compatible Alpha/BetaBrite signs and USB serial adapters may work, but remain unverified until physically tested. Review [Hardware setup](docs/hardware.md) before changing wiring.
 
-See [Hardware setup](docs/hardware.md) before changing wiring.
+## Use the desktop application
 
-## Serial discovery
+1. Connect the USB-to-serial adapter and sign.
+2. Open **BetaBrite Controller**.
+3. Select the detected adapter and choose **CHECK CONNECTION**.
+4. When the application reports READY, compose a message or effect and choose **SEND TO SIGN**.
 
-By default the controller uses:
+The application can remember the adapter across launches. It never interprets READY or a completed serial write as an acknowledgment from the display.
 
-```text
-auto
-```
-
-Automatic selection prefers the tested Prolific PL2303GT adapter. If that adapter is not present and exactly one other USB serial adapter is connected, that device is selected.
-
-List detected ports:
+Developers running from a Python environment can launch the same interface with:
 
 ```bash
-betabrite --list-ports
+betabrite-desktop
 ```
 
-Example devices:
-
-```text
-Windows   COM4
-macOS     /dev/cu.usbserial-XXXX
-Linux     /dev/ttyUSB0
-```
-
-You can always select a port manually:
-
-```bash
-betabrite "HELLO WORLD" --port COM4
-betabrite "HELLO WORLD" --port /dev/cu.usbserial-XXXX
-betabrite "HELLO WORLD" --port /dev/ttyUSB0
-```
-
-## Install
-
-### Fedora desktop application
-
-The current complete GUI installer supports Fedora Linux.
-
-1. Open the [latest release](https://github.com/grubbs-dev/betabrite-controller/releases/latest).
-2. Download and extract the release archive.
-3. Open a terminal in the extracted folder.
-4. Run:
-
-```bash
-bash install.sh
-```
-
-The installer configures the GTK4 application, installs the controller through the standard Python package metadata, creates an isolated runtime with Fedora's GTK bindings, adds launchers, configures the tested USB adapter rule, and enables serial permissions.
-
-### Cross-platform controller core
-
-For development, testing, and CLI use on Windows, macOS, or Linux:
-
-```bash
-python -m pip install .
-```
-
-After installation:
-
-```bash
-betabrite --version
-betabrite --list-ports
-betabrite "HELLO WORLD"
-```
-
-This Python-based installation is an interim developer/advanced-user path. Tagged releases also publish a standard wheel and Python source distribution. The portable GUI release will bundle its runtime and dependencies so normal desktop users do not need Python or pip.
-
-### Portable desktop development
-
-Install the Qt desktop extra:
-
-```bash
-python -m pip install -e ".[desktop]"
-```
-
-Verify the runtime without opening a window:
+The headless runtime check is:
 
 ```bash
 betabrite-desktop --smoke-test
 ```
 
-Launch the portable desktop foundation:
+## Command line
+
+Install the Python package for automation or advanced CLI use:
 
 ```bash
-betabrite-desktop
+python -m pip install .
 ```
 
-See [Portable desktop application](docs/portable-gui.md) for architecture and migration status.
-
-### Native desktop build development
-
-Phase 8 adds native build automation around the portable Qt controller. Builds are produced on the operating system they target with Qt for Python's `pyside6-deploy` wrapper around Nuitka.
-
-Development artifacts currently include:
-
-| Platform | Development artifacts |
-| --- | --- |
-| Windows | portable `.exe`, `.zip`, and an unsigned Inno Setup installer |
-| macOS | `.app` packaged as `.zip`, plus an unsigned `.dmg` |
-| Linux | portable self-contained `.bin` and `.tar.gz` |
-
-These development builds bundle the Python and Qt runtime. They do not require the user to install Python, pip, or Git.
-
-Build the native artifact for the current operating system. On Fedora, install `python3-devel` first so Nuitka can access `Python.h`:
+Inspect devices and status:
 
 ```bash
-sudo dnf install python3-devel
-python scripts/build-native.py
-```
-
-Inspect the deployment command without compiling:
-
-```bash
-python scripts/build-native.py --dry-run
-```
-
-Native build CI uploads the resulting artifacts for Windows, macOS, and Linux. Code signing, Apple notarization, and final release promotion remain separate release gates.
-
-## Use
-
-### Command line
-
-Send a simple message:
-
-```bash
-betabrite "HELLO WORLD"
-```
-
-Choose a color and mode:
-
-```bash
-betabrite "SYSTEM ONLINE" --color green --mode hold
-```
-
-Add formatting and speed:
-
-```bash
-betabrite "WARNING" --color red --flash --speed 5
-```
-
-Run a built-in sign effect:
-
-```bash
-betabrite --special fireworks
-```
-
-Inspect serial devices:
-
-```bash
+betabrite --version
 betabrite --list-ports
-```
-
-Inspect passive adapter selection:
-
-```bash
 betabrite --status
-```
-
-Actively verify that the serial adapter can be opened:
-
-```bash
 betabrite --check-connection
 ```
 
-Remember or clear the preferred adapter:
+Send messages and effects:
 
 ```bash
+betabrite "HELLO WORLD"
+betabrite "SYSTEM ONLINE" --color green --mode hold
+betabrite "WARNING" --color red --flash --speed 5
+betabrite --special fireworks
+```
+
+Select or remember a port explicitly:
+
+```bash
+betabrite "HELLO" --port COM4
+betabrite "HELLO" --port /dev/cu.usbserial-XXXX
+betabrite "HELLO" --port /dev/ttyUSB0
 betabrite --remember-port
 betabrite --forget-port
 ```
 
-See all options:
-
-```bash
-betabrite --help
-```
-
-### Portable desktop foundation
-
-During 1.2 development, launch the cross-platform Qt application with:
-
-```bash
-betabrite-desktop
-```
-
-The portable application provides real adapter discovery, remembered-adapter controls, active READY diagnostics, message composition, colors, display modes, special effects, speed, flash/wide formatting, quick presets, and physical transmission through the same controller backend used by the CLI and Fedora GTK application.
-
-### Fedora desktop app
-
-Open the application launcher and search for **BetaBrite Controller**, or run:
-
-```bash
-betabrite-gui
-```
-
-The current GUI provides message entry, colors, motion modes, special effects, speed, flash/wide text controls, quick-transmit presets, connection monitoring, and hardware setup.
+Automatic selection uses `auto`, prefers the tested PL2303GT adapter, and safely refuses to guess when several unrecognized USB serial adapters are connected.
 
 ## Troubleshooting
 
@@ -254,59 +135,66 @@ Start with:
 
 ```bash
 betabrite --list-ports
+betabrite --check-connection
 ```
 
-If the adapter appears but automatic selection is ambiguous, pass the correct device explicitly with `--port`.
-
-See [Troubleshooting](docs/troubleshooting.md) for platform-specific checks.
+If no adapter appears, confirm that the operating system sees the USB serial device and has the required driver. On Linux, also confirm serial-device permissions. See [Troubleshooting](docs/troubleshooting.md) for Windows Device Manager, macOS `/dev/cu.*`, and Linux/Fedora guidance.
 
 ## Development
 
-Create a virtual environment and install the project:
+Create an environment and install the desktop extra:
 
 ```bash
 python -m venv .venv
-python -m pip install -e .
+python -m pip install -e ".[desktop]"
 ```
 
-Activate the environment using the command appropriate for your operating system, then run:
+Run the deterministic suite and desktop smoke test:
 
 ```bash
 python -m unittest discover -s tests -p "test_*.py" -v
+betabrite-desktop --smoke-test
 ```
 
-GitHub CI runs the controller core on Windows, macOS, and Linux.
+Build the native artifact for the current operating system:
+
+```bash
+python scripts/build-native.py --dry-run
+python scripts/build-native.py
+```
+
+Fedora native compilation also needs the matching Python development headers:
+
+```bash
+sudo dnf install python3-devel
+```
+
+Regenerate the original application icon assets with Pillow:
+
+```bash
+python -m pip install "Pillow==12.3.0"
+python scripts/generate-icons.py
+python scripts/generate-icons.py --check
+```
+
+See [Portable desktop application](docs/portable-gui.md), [Packaging and distribution](docs/packaging.md), and [Contributing](CONTRIBUTING.md) for architecture and release details.
 
 ## Project layout
 
 ```text
-betabrite-controller/
-├── betabrite                     # source-checkout CLI shim
-├── betabrite-gui                 # current GTK4 desktop application
-├── betabrite_controller/
-│   ├── controller.py             # sign protocol/controller
-│   ├── devices.py                # cross-platform serial discovery
-│   ├── desktop.py                # portable PySide6 desktop entry point
-│   ├── desktop_model.py          # toolkit-independent desktop view model
-│   ├── desktop_controls.py       # toolkit-independent composer/transmit model
-│   └── cli.py                    # portable command-line interface
-├── packaging/                    # current Linux desktop/udev assets
-├── tests/
-├── docs/
-├── scripts/
-├── pyproject.toml
-├── install.sh                    # current Fedora GUI installer
-└── uninstall.sh
+betabrite_controller/       shared backend, CLI, and portable Qt application
+assets/                     original SVG and generated platform icons
+packaging/windows/          per-user Inno Setup installer definition
+packaging/linux/            portable launch and desktop-integration assets
+scripts/build-native.py     native compiler, packager, smoke test, checksums
+scripts/generate-icons.py   deterministic branding asset generator
+.github/workflows/          core, native, and tagged-release automation
+install.sh                  retained Fedora GTK4 installer
+betabrite-gui               retained Fedora GTK4 application
 ```
 
-## Releases
-
-Version history is tracked in [CHANGELOG.md](CHANGELOG.md).
-
-Tagged releases publish complete source archives, a standard Python wheel, a Python source distribution, and checksums. See [Packaging and distribution](docs/packaging.md) for the artifact boundary and future native-app targets.
-
-Native Windows, macOS, and portable Linux desktop artifacts will be added only after the portable GUI packaging phase is implemented and validated.
+Version history is in [CHANGELOG.md](CHANGELOG.md). Every release includes source archives, a Python wheel and sdist, native desktop downloads, platform checksum manifests, and a combined `SHA256SUMS` file.
 
 ## License
 
-No open-source license has been selected for this repository yet. Until a license is added, normal copyright restrictions apply to the source code.
+No open-source license has been selected for this repository. Until one is added, normal copyright restrictions apply to the source code.
