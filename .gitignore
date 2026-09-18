@@ -8,3 +8,9 @@ dist/
 
 *.egg-info/
 build/
+
+pysidedeploy.spec
+deployment/
+/BetaBriteController.bin
+/BetaBriteController.exe
+/BetaBriteController.app/

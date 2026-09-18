@@ -140,6 +140,35 @@ betabrite-desktop
 
 See [Portable desktop application](docs/portable-gui.md) for architecture and migration status.
 
+### Native desktop build development
+
+Phase 8 adds native build automation around the portable Qt controller. Builds are produced on the operating system they target with Qt for Python's `pyside6-deploy` wrapper around Nuitka.
+
+Development artifacts currently include:
+
+| Platform | Development artifacts |
+| --- | --- |
+| Windows | portable `.exe`, `.zip`, and an unsigned Inno Setup installer |
+| macOS | `.app` packaged as `.zip`, plus an unsigned `.dmg` |
+| Linux | portable self-contained `.bin` and `.tar.gz` |
+
+These development builds bundle the Python and Qt runtime. They do not require the user to install Python, pip, or Git.
+
+Build the native artifact for the current operating system. On Fedora, install `python3-devel` first so Nuitka can access `Python.h`:
+
+```bash
+sudo dnf install python3-devel
+python scripts/build-native.py
+```
+
+Inspect the deployment command without compiling:
+
+```bash
+python scripts/build-native.py --dry-run
+```
+
+Native build CI uploads the resulting artifacts for Windows, macOS, and Linux. Code signing, Apple notarization, and final release promotion remain separate release gates.
+
 ## Use
 
 ### Command line
