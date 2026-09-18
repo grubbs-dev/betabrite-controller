@@ -10,3 +10,7 @@ dist/
 build/
 
 pysidedeploy.spec
+deployment/
+/BetaBriteController.bin
+/BetaBriteController.exe
+/BetaBriteController.app/
