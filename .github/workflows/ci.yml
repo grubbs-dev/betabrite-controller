@@ -56,7 +56,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Check shell syntax
-        run: bash -n install.sh uninstall.sh test.sh scripts/build-release.sh
+        run: |
+          bash -n install.sh uninstall.sh test.sh scripts/build-release.sh \
+            packaging/linux/AppRun packaging/linux/install-desktop.sh \
+            packaging/linux/uninstall-desktop.sh
 
 
   package:
@@ -96,10 +99,11 @@ jobs:
       - name: Verify packaged application icon
         shell: bash
         run: |
+          cd "$RUNNER_TEMP"
           python -c "from betabrite_controller.branding import application_icon_path; assert application_icon_path().is_file()"
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-package
           path: |
