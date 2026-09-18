@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "betabrite-controller"
-version = "1.2.0.dev0"
+version = "1.2.0"
 description = "Cross-platform controller core for classic Alpha/BetaBrite LED signs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,4 +37,7 @@ betabrite = "betabrite_controller.cli:main"
 betabrite-desktop = "betabrite_controller.desktop_launcher:main"
 
 [tool.setuptools]
-packages = ["betabrite_controller"]
+packages = ["betabrite_controller", "betabrite_controller.assets"]
+
+[tool.setuptools.package-data]
+betabrite_controller = ["assets/*.png"]

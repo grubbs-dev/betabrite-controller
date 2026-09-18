@@ -9,7 +9,49 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip "Pillow==12.3.0"
+          python -m pip install ".[desktop]"
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          package_version="$(python -c 'from betabrite_controller import __version__; print(__version__)')"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "$package_version" != "$tag_version" ]]; then
+            echo "Tag version $tag_version does not match package version $package_version." >&2
+            exit 1
+          fi
+
+      - name: Validate release sources
+        run: |
+          bash -n install.sh uninstall.sh test.sh scripts/build-release.sh \
+            packaging/linux/AppRun packaging/linux/install-desktop.sh \
+            packaging/linux/uninstall-desktop.sh
+          python -m py_compile betabrite betabrite-gui betabrite_desktop.py \
+            betabrite_controller/*.py scripts/*.py tests/*.py
+          python scripts/generate-icons.py --check
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          betabrite-desktop --smoke-test
+
+  source-python:
+    name: Source and Python artifacts
+    needs: preflight
     runs-on: ubuntu-latest
 
     steps:
@@ -23,27 +65,7 @@ jobs:
           cache: pip
 
       - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install build twine
-          python -m pip install .
-
-      - name: Verify tag matches package version
-        shell: bash
-        run: |
-          package_version="$(python -c 'from betabrite_controller import __version__; print(__version__)')"
-          tag_version="${GITHUB_REF_NAME#v}"
-
-          if [[ "$package_version" != "$tag_version" ]]; then
-            echo "Tag version $tag_version does not match package version $package_version." >&2
-            exit 1
-          fi
-
-      - name: Validate sources
-        run: |
-          bash -n install.sh uninstall.sh test.sh scripts/build-release.sh
-          python -m py_compile betabrite betabrite-gui betabrite_controller/*.py tests/*.py
-          python -m unittest discover -s tests -p 'test_*.py' -v
+        run: python -m pip install --upgrade build twine
 
       - name: Build source release archives
         run: bash scripts/build-release.sh "${GITHUB_REF_NAME}"
@@ -55,7 +77,7 @@ jobs:
             dist/betabrite_controller-*.whl \
             dist/betabrite_controller-*.tar.gz
 
-      - name: Generate release checksums
+      - name: Generate source and Python checksums
         shell: bash
         run: |
           cd dist
@@ -64,18 +86,72 @@ jobs:
             betabrite-controller-*.zip \
             betabrite_controller-*.whl \
             betabrite_controller-*.tar.gz \
-            > SHA256SUMS
+            > SHA256SUMS-source
+
+      - name: Upload source and Python artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-source-python
+          path: |
+            dist/betabrite-controller-*.tar.gz
+            dist/betabrite-controller-*.zip
+            dist/betabrite_controller-*.whl
+            dist/betabrite_controller-*.tar.gz
+            dist/SHA256SUMS-source
+          if-no-files-found: error
+
+  native:
+    name: Native applications
+    needs: preflight
+    uses: ./.github/workflows/native-desktop.yml
+    secrets:
+      WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64 }}
+      WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD }}
+      MACOS_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+      MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+      APPLE_NOTARY_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_BASE64 }}
+
+  publish:
+    name: Publish GitHub Release
+    needs: [source-python, native]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download source and Python artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-source-python
+          path: release-assets
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate and verify combined checksums
+        shell: bash
+        run: |
+          cd release-assets
+          manifest="$RUNNER_TEMP/SHA256SUMS"
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' |
+            sort |
+            while IFS= read -r artifact; do sha256sum "$artifact"; done \
+            > "$manifest"
+          mv "$manifest" SHA256SUMS
+          sha256sum --check SHA256SUMS
+          ls -lah
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            dist/betabrite-controller-*.tar.gz \
-            dist/betabrite-controller-*.zip \
-            dist/betabrite_controller-*.whl \
-            dist/betabrite_controller-*.tar.gz \
-            dist/SHA256SUMS \
+            release-assets/* \
             --verify-tag \
             --generate-notes \
             --title "BetaBrite Controller ${GITHUB_REF_NAME}"

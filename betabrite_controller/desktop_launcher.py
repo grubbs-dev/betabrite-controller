@@ -16,7 +16,7 @@ from .presentation import connection_view
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="betabrite-desktop",
-        description="Portable Qt desktop foundation for BetaBrite Controller.",
+        description="Portable Qt desktop controller for BetaBrite signs.",
     )
     parser.add_argument(
         "--smoke-test",

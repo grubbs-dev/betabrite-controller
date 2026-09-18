@@ -29,6 +29,7 @@ $SUDO rm -f /usr/local/bin/betabrite-gui
 $SUDO rm -f /usr/local/sbin/betabrite
 $SUDO rm -f /usr/local/sbin/betabrite-gui
 $SUDO rm -f /usr/local/share/applications/betabrite-controller.desktop
+$SUDO rm -f /usr/local/share/icons/hicolor/256x256/apps/dev.grubbs.BetaBriteController.png
 $SUDO rm -f /etc/udev/rules.d/99-betabrite.rules
 
 $SUDO udevadm control --reload-rules

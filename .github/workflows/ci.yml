@@ -74,7 +74,10 @@ jobs:
           cache: pip
 
       - name: Install packaging tools
-        run: python -m pip install --upgrade build twine
+        run: python -m pip install --upgrade build twine "Pillow==12.3.0"
+
+      - name: Verify generated application branding
+        run: python scripts/generate-icons.py --check
 
       - name: Build wheel and source distribution
         run: python -m build
@@ -89,6 +92,11 @@ jobs:
         run: |
           betabrite --version
           betabrite --list-ports
+
+      - name: Verify packaged application icon
+        shell: bash
+        run: |
+          python -c "from betabrite_controller.branding import application_icon_path; assert application_icon_path().is_file()"
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4

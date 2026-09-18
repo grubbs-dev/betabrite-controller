@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="190" fill="#10141d"/>
+  <rect x="54" y="54" width="916" height="916" rx="145" fill="none" stroke="#526274" stroke-width="28"/>
+  <rect x="112" y="112" width="800" height="800" rx="92" fill="#19170f" stroke="#303a47" stroke-width="24"/>
+  <g aria-label="amber LED letter B">
+    <circle cx="174" cy="190" r="27" fill="#ffb21a"/>
+    <circle cx="272" cy="190" r="27" fill="#ffb21a"/>
+    <circle cx="370" cy="190" r="27" fill="#ffb21a"/>
+    <circle cx="468" cy="190" r="27" fill="#ffb21a"/>
+    <circle cx="174" cy="283" r="27" fill="#ffb21a"/>
+    <circle cx="566" cy="283" r="27" fill="#ffb21a"/>
+    <circle cx="174" cy="376" r="27" fill="#ffb21a"/>
+    <circle cx="566" cy="376" r="27" fill="#ffb21a"/>
+    <circle cx="174" cy="469" r="27" fill="#ffb21a"/>
+    <circle cx="272" cy="469" r="27" fill="#ffb21a"/>
+    <circle cx="370" cy="469" r="27" fill="#ffb21a"/>
+    <circle cx="468" cy="469" r="27" fill="#ffb21a"/>
+    <circle cx="174" cy="562" r="27" fill="#ffb21a"/>
+    <circle cx="566" cy="562" r="27" fill="#ffb21a"/>
+    <circle cx="174" cy="655" r="27" fill="#ffb21a"/>
+    <circle cx="566" cy="655" r="27" fill="#ffb21a"/>
+    <circle cx="174" cy="748" r="27" fill="#ffb21a"/>
+    <circle cx="272" cy="748" r="27" fill="#ffb21a"/>
+    <circle cx="370" cy="748" r="27" fill="#ffb21a"/>
+    <circle cx="468" cy="748" r="27" fill="#ffb21a"/>
+  </g>
+  <rect x="720" y="214" width="116" height="116" rx="35" fill="#31d6a1"/>
+  <circle cx="778" cy="478" r="54" fill="#6e7c8e"/>
+  <circle cx="778" cy="638" r="54" fill="#6e7c8e"/>
+  <path d="M742 795h72m-36-36v72" fill="none" stroke="#31d6a1" stroke-width="34" stroke-linecap="round"/>
+</svg>
