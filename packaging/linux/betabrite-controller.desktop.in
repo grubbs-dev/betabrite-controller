@@ -2,9 +2,9 @@
 Type=Application
 Name=BetaBrite Controller
 Comment=Control an Alpha/BetaBrite LED display
-Exec=/usr/local/bin/betabrite-gui
+Exec=@EXECUTABLE@
 Icon=dev.grubbs.BetaBriteController
 Terminal=false
-Categories=Utility;
+Categories=Utility;HardwareSettings;
 StartupNotify=true
 StartupWMClass=dev.grubbs.BetaBriteController

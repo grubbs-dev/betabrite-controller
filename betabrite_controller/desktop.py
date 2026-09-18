@@ -7,7 +7,7 @@ import sys
 
 from PySide6 import __version__ as pyside_version
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __app_name__, __author__, __tagline__, __version__
+from .branding import application_icon_path
 from .connection import BetaBriteTransportError, ConnectionDiagnostic, probe_connection
 from .controller import BetaBriteController, COLORS, MODES, SPECIALS
 from .desktop_controls import PRESETS, MessageDraft, can_transmit, display_name
@@ -84,6 +85,7 @@ class PortableWindow(QMainWindow):
         self.speed_buttons: dict[int, QPushButton] = {}
 
         self.setWindowTitle(f"{__app_name__} // {__author__}")
+        self.setWindowIcon(QIcon(str(application_icon_path())))
         self.setMinimumSize(900, 760)
         self.resize(980, 900)
 
@@ -629,7 +631,9 @@ def main(argv=None) -> int:
     app.setApplicationName(__app_name__)
     app.setApplicationDisplayName(__app_name__)
     app.setOrganizationName("Grubbs")
+    app.setOrganizationDomain("grubbs.dev")
     app.setDesktopFileName(DESKTOP_FILE_NAME)
+    app.setWindowIcon(QIcon(str(application_icon_path())))
 
     window = PortableWindow()
     window.show()

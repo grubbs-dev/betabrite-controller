@@ -7,6 +7,7 @@ INSTALL_DIR="/opt/$APP_NAME"
 VENV_DIR="$INSTALL_DIR/venv"
 BIN_DIR="/usr/local/bin"
 DESKTOP_DIR="/usr/local/share/applications"
+ICON_DIR="/usr/local/share/icons/hicolor/256x256/apps"
 UDEV_DIR="/etc/udev/rules.d"
 
 if [[ $EUID -eq 0 ]]; then
@@ -175,8 +176,15 @@ $SUDO install -Dm644 \
     "$SCRIPT_DIR/packaging/betabrite-controller.desktop" \
     "$DESKTOP_DIR/betabrite-controller.desktop"
 
+$SUDO install -Dm644 \
+    "$SCRIPT_DIR/packaging/linux/dev.grubbs.BetaBriteController.png" \
+    "$ICON_DIR/dev.grubbs.BetaBriteController.png"
+
 if command -v update-desktop-database >/dev/null 2>&1; then
     $SUDO update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    $SUDO gtk-update-icon-cache -f -t /usr/local/share/icons/hicolor >/dev/null 2>&1 || true
 fi
 
 good "BetaBrite Controller added to application menu"
@@ -213,6 +221,9 @@ step "Running installation health check"
 
 [[ -f "$DESKTOP_DIR/betabrite-controller.desktop" ]] ||
     fail "Desktop application was not installed."
+
+[[ -f "$ICON_DIR/dev.grubbs.BetaBriteController.png" ]] ||
+    fail "Desktop application icon was not installed."
 
 [[ -f "$UDEV_DIR/99-betabrite.rules" ]] ||
     fail "USB hardware rule was not installed."
