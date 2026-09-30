@@ -22,7 +22,7 @@ def install_appimage():
     desktop = base / "applications" / "dev.grubbs.BetaBriteController.desktop"
     desktop.parent.mkdir(parents=True, exist_ok=True)
     # Desktop Entry Exec quoting has its own escaping rules; this is not a shell command.
-    executable = str(destination).replace("\\", "\\\\\\\\").replace('"', '\\\\"').replace('`', '\\\\`').replace('$', '\\\\$').replace('%', '%%')
+    executable = destination.as_posix().replace("\\", "\\\\\\\\").replace('"', '\\\\"').replace('`', '\\\\`').replace('$', '\\\\$').replace('%', '%%')
     if "\n" in executable or "\r" in executable:
         raise ValueError("Application folder contains unsupported newline characters")
     desktop.write_text(

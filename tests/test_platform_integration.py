@@ -18,7 +18,7 @@ class PlatformIntegrationTests(unittest.TestCase):
                 installed = install_appimage()
             self.assertEqual(installed.read_bytes(), source.read_bytes())
             desktop = (data / "applications" / "dev.grubbs.BetaBriteController.desktop").read_text()
-            self.assertIn(f'Exec="{installed}"', desktop)
+            self.assertIn(f'Exec="{installed.as_posix()}"', desktop)
             self.assertIn("Terminal=false", desktop)
 
     def test_source_launch_cannot_install_arbitrary_file(self):

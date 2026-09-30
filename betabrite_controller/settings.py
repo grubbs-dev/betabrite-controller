@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 import tempfile
 import logging
@@ -167,7 +167,7 @@ def config_dir(
         return home / "Library" / "Application Support" / WINDOWS_APP_DIR_NAME
 
     xdg = env.get("XDG_CONFIG_HOME")
-    base = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".config"
+    base = Path(xdg) if xdg and PurePosixPath(xdg).is_absolute() else home / ".config"
     return base / APP_DIR_NAME
 
 
