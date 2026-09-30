@@ -19,10 +19,15 @@ else
 fi
 
 NAME="betabrite-controller-${VERSION}"
+if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Expected a semantic version such as v1.2.0" >&2
+    exit 2
+fi
 DIST="$ROOT/dist"
-STAGE="$DIST/$NAME"
-
-rm -rf "$DIST"
+mkdir -p "$DIST"
+STAGING="$(mktemp -d "$DIST/.source-XXXXXX")"
+STAGE="$STAGING/$NAME"
+trap 'rm -rf -- "$STAGING"' EXIT
 mkdir -p "$STAGE"
 
 copy_file() {
@@ -36,9 +41,12 @@ copy_exec() {
 copy_file README.md
 copy_file CHANGELOG.md
 copy_file CONTRIBUTING.md
+copy_file LICENSE
+copy_file THIRD_PARTY_NOTICES.md
 copy_file .gitignore
 copy_file requirements.txt
 copy_file pyproject.toml
+copy_file MANIFEST.in
 copy_file INSTALL-BETABRITE.desktop
 copy_exec install.sh
 copy_exec uninstall.sh
@@ -59,10 +67,10 @@ find "$STAGE" -type d \( -name __pycache__ -o -name '*.egg-info' \) -prune -exec
 find "$STAGE" -type f -name '*.pyc' -delete
 
 (
-    cd "$DIST"
-    tar -czf "$NAME.tar.gz" "$NAME"
+    cd "$STAGING"
+    tar -czf "$DIST/$NAME.tar.gz" "$NAME"
 
-    python3 - "$NAME" "$NAME.zip" <<'PY'
+    python3 - "$NAME" "$DIST/$NAME.zip" <<'PY'
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 import sys
@@ -76,6 +84,7 @@ with ZipFile(archive, "w", ZIP_DEFLATED) as zf:
             zf.write(path, path)
 PY
 
+    cd "$DIST"
     sha256sum "$NAME.tar.gz" "$NAME.zip" > SHA256SUMS
 )
 

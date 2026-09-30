@@ -1,0 +1,9 @@
+# Native build baseline; update deliberately and rerun all platform gates.
+PySide6==6.11.2
+shiboken6==6.11.2
+PySide6_Essentials==6.11.2
+PySide6_Addons==6.11.2
+Nuitka==4.2.1
+Pillow==12.3.0
+pyserial==3.5
+alphasignpy==0.1.1

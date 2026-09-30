@@ -4,6 +4,19 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
+## Unreleased — desktop release hardening
+
+- Background serial operations, duplicate-send protection and bounded write timeout
+- Named signs, manual ports, saved/recent messages and persisted editor settings
+- Safe recovery from malformed settings and atomic private preference writes
+- MIT license, bundled dependency license texts, About, diagnostics and rotating logs
+- Full Qt window smoke tests with isolated settings and no active hardware access
+- Linux AppImage, verified build-tool downloads and optional application-menu installation
+- Single version source, native installer/DMG validation and least-privilege release publishing
+- User-first installation, operation, troubleshooting and release-checklist documentation
+
+Validation claims for this work are recorded in docs/RELEASE_VALIDATION.md. No new hardware test is implied.
+
 ## [1.2.0] - 2026-09-17
 
 ### Added

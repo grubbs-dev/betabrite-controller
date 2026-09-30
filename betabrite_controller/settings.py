@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 import json
 import os
 from pathlib import Path
 import sys
+import tempfile
+import logging
 
 
 SETTINGS_SCHEMA_VERSION = 1
@@ -41,12 +43,12 @@ class DevicePreference:
         if not isinstance(value, dict):
             return None
         return cls(
-            device=value.get("device"),
+            device=_optional_text(value.get("device")),
             vid=_optional_int(value.get("vid")),
             pid=_optional_int(value.get("pid")),
-            serial_number=value.get("serial_number"),
-            manufacturer=value.get("manufacturer"),
-            product=value.get("product"),
+            serial_number=_optional_text(value.get("serial_number")),
+            manufacturer=_optional_text(value.get("manufacturer")),
+            product=_optional_text(value.get("product")),
         )
 
     def to_mapping(self) -> dict:
@@ -73,6 +75,10 @@ class DevicePreference:
 @dataclass(frozen=True, slots=True)
 class AppSettings:
     preferred_device: DevicePreference | None = None
+    signs: dict[str, DevicePreference] = field(default_factory=dict)
+    draft: dict = field(default_factory=dict)
+    saved_messages: dict[str, dict] = field(default_factory=dict)
+    recent_messages: list[dict] = field(default_factory=list)
 
     @classmethod
     def from_mapping(cls, value) -> "AppSettings":
@@ -81,12 +87,24 @@ class AppSettings:
         return cls(
             preferred_device=DevicePreference.from_mapping(
                 value.get("preferred_device")
-            )
+            ),
+            signs={name: device for name, item in _mapping(value.get("signs")).items()
+                   if (device := DevicePreference.from_mapping(item)) is not None},
+            draft=_draft(value.get("draft")),
+            saved_messages={name: draft for name, item in _mapping(value.get("saved_messages")).items()
+                            if (draft := _draft(item))},
+            recent_messages=[draft for item in (value.get("recent_messages") or [])[:20]
+                             if (draft := _draft(item))]
+            if isinstance(value.get("recent_messages"), list) else [],
         )
 
     def to_mapping(self) -> dict:
         return {
             "schema_version": SETTINGS_SCHEMA_VERSION,
+            "signs": {name: device.to_mapping() for name, device in self.signs.items()},
+            "draft": self.draft,
+            "saved_messages": self.saved_messages,
+            "recent_messages": self.recent_messages,
             "preferred_device": (
                 self.preferred_device.to_mapping()
                 if self.preferred_device is not None
@@ -95,12 +113,33 @@ class AppSettings:
         }
 
 
+def _optional_text(value) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _mapping(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _draft(value) -> dict:
+    # Import lazily: the controller also uses settings during discovery.
+    from .desktop_controls import MessageDraft
+    if not isinstance(value, dict):
+        return {}
+    try:
+        MessageDraft(**value).validate()
+    except (ValueError, TypeError, AttributeError):
+        return {}
+    return value
+
+
 def _optional_int(value) -> int | None:
     if value is None:
         return None
     try:
-        return int(value)
-    except (TypeError, ValueError):
+        number = int(value)
+        return number if 0 <= number <= 65535 else None
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -128,7 +167,7 @@ def config_dir(
         return home / "Library" / "Application Support" / WINDOWS_APP_DIR_NAME
 
     xdg = env.get("XDG_CONFIG_HOME")
-    base = Path(xdg) if xdg else home / ".config"
+    base = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".config"
     return base / APP_DIR_NAME
 
 
@@ -140,7 +179,9 @@ def load_settings(path: Path | str | None = None) -> AppSettings:
     target = Path(path) if path is not None else settings_path()
     try:
         data = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+    except (OSError, json.JSONDecodeError, TypeError, ValueError, RecursionError):
+        if target.exists():
+            logging.getLogger(__name__).warning("Could not read settings; using defaults")
         return AppSettings()
     return AppSettings.from_mapping(data)
 
@@ -151,19 +192,27 @@ def save_settings(
 ) -> Path:
     target = Path(path) if path is not None else settings_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(f".{target.name}.tmp")
     payload = json.dumps(settings.to_mapping(), indent=2, sort_keys=True) + "\n"
-    temporary.write_text(payload, encoding="utf-8")
-    os.replace(temporary, target)
+    # Unique, private temporary files avoid symlinks and concurrent-writer collisions.
+    descriptor, name = tempfile.mkstemp(dir=target.parent, prefix=".settings-")
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
     return target
 
 
 def remember_device(device, path: Path | str | None = None) -> Path:
     return save_settings(
-        AppSettings(preferred_device=DevicePreference.from_device(device)),
+        replace(load_settings(path), preferred_device=DevicePreference.from_device(device)),
         path,
     )
 
 
 def forget_device(path: Path | str | None = None) -> Path:
-    return save_settings(AppSettings(), path)
+    return save_settings(replace(load_settings(path), preferred_device=None), path)

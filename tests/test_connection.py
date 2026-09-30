@@ -116,7 +116,8 @@ class ConnectionTests(unittest.TestCase):
         )
 
         self.assertEqual(diagnostic.state, "open-failed")
-        self.assertIn("driver failure", diagnostic.message)
+        self.assertIn("Reconnect", diagnostic.message)
+        self.assertNotIn("driver failure", diagnostic.message)
 
     def test_transport_error_from_diagnostic(self):
         diagnostic = classify_transport_exception(

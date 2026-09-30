@@ -1,0 +1,9 @@
+include LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md CONTRIBUTING.md requirements.txt
+include betabrite betabrite-gui betabrite_desktop.py install.sh uninstall.sh test.sh INSTALL-BETABRITE.desktop
+recursive-include scripts *.py *.sh
+recursive-include packaging *.txt *.in *.desktop *.rules *.sh *.iss *.png AppRun
+recursive-include assets *.svg *.png *.ico *.icns
+recursive-include docs *.md *.png
+recursive-include .github *.yml *.md
+global-exclude *.pyc
+prune scripts/__pycache__

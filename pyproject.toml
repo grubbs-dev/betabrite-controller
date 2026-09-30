@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "betabrite-controller"
-version = "1.2.0"
+dynamic = ["version"]
 description = "Cross-platform controller core for classic Alpha/BetaBrite LED signs"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
   { name = "Grubbs" }
@@ -34,10 +36,15 @@ Issues = "https://github.com/grubbs-dev/betabrite-controller/issues"
 
 [project.scripts]
 betabrite = "betabrite_controller.cli:main"
+
+[project.gui-scripts]
 betabrite-desktop = "betabrite_controller.desktop_launcher:main"
 
 [tool.setuptools]
-packages = ["betabrite_controller", "betabrite_controller.assets"]
+packages = ["betabrite_controller", "betabrite_controller.assets", "betabrite_controller.assets.licenses"]
+
+[tool.setuptools.dynamic]
+version = {attr = "betabrite_controller.__version__"}
 
 [tool.setuptools.package-data]
-betabrite_controller = ["assets/*.png"]
+betabrite_controller = ["assets/*.png", "assets/licenses/*.txt"]
