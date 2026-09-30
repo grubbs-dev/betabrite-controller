@@ -41,6 +41,12 @@ class MessageDraft:
         return bool(self.normalized_message or self.special_name)
 
     def validate(self) -> "MessageDraft":
+        if not isinstance(self.message, str):
+            raise ValueError("Message must be text")
+        if any(ord(character) < 32 or ord(character) == 127 for character in self.message):
+            raise ValueError("Messages cannot contain protocol control characters")
+        if not isinstance(self.flash, bool) or not isinstance(self.wide, bool):
+            raise ValueError("Formatting options must be on or off")
         if self.color_name not in COLORS:
             raise ValueError(f"Unknown color: {self.color_name}")
 

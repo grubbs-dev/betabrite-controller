@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import errno
+import logging
 
 import serial
 
@@ -63,7 +64,12 @@ def classify_transport_exception(
     source: str | None = None,
 ) -> ConnectionDiagnostic | None:
     """Translate common serial/OS failures into stable customer-facing states."""
+    if exc.__cause__ is not None and exc.__cause__ is not exc:
+        diagnostic = classify_transport_exception(exc.__cause__, port, source=source)
+        if diagnostic is not None:
+            return diagnostic
     text = str(exc).casefold()
+    logging.getLogger(__name__).warning("Serial operation failed on %s: %s", port, exc)
     error_number = getattr(exc, "errno", None)
 
     if (
@@ -119,11 +125,9 @@ def classify_transport_exception(
         )
 
     if isinstance(exc, (serial.SerialException, OSError)):
-        detail = str(exc).strip()
-        suffix = f" ({detail})" if detail else ""
         return ConnectionDiagnostic(
             state="open-failed",
-            message=f"Could not open serial port {port}{suffix}.",
+            message=f"Cannot access {port}. Reconnect the cable, check its driver, and close other serial applications.",
             port=port,
             source=source,
         )

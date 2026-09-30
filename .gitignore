@@ -8,6 +8,8 @@ dist/
 
 *.egg-info/
 build/
+.prior-build/
+/betabrite-gui.pre-v1-gui
 
 pysidedeploy.spec
 deployment/

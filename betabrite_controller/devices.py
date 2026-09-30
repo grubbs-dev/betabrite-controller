@@ -224,6 +224,11 @@ def resolve_device(
                 f"({ports}). Select the correct adapter and remember it again."
             )
 
+        raise DeviceNotFoundError(
+            "The remembered adapter is disconnected. Reconnect it, select another port manually, "
+            "or forget the saved adapter before automatic discovery."
+        )
+
     preferred = [device for device in available if device.preferred]
     if len(preferred) == 1:
         return DeviceSelection(

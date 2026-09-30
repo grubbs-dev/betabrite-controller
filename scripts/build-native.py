@@ -17,6 +17,7 @@ import sysconfig
 import tarfile
 import time
 import zipfile
+import tempfile
 from pathlib import Path
 
 from betabrite_controller import __version__
@@ -29,7 +30,7 @@ DEPLOY_SPEC = ROOT / "pysidedeploy.spec"
 APP_NAME = "BetaBriteController"
 DISPLAY_NAME = "BetaBrite Controller"
 BUNDLE_IDENTIFIER = "dev.grubbs.BetaBriteController"
-IGNORE_DIRS = ".git,.venv,build,dist,__pycache__"
+IGNORE_DIRS = ".git,.venv,.prior-build,build,dist,__pycache__"
 PACKAGE_ICON = (
     ROOT / "betabrite_controller" / "assets" / "betabrite-controller.png"
 )
@@ -153,6 +154,7 @@ def native_extra_args(target: str, *, signing_identity: str = "") -> list[str]:
             f"--include-data-files={PACKAGE_ICON.resolve()}="
             "betabrite_controller/assets/betabrite-controller.png"
         ),
+        f"--include-data-dir={ROOT / 'betabrite_controller' / 'assets' / 'licenses'}=betabrite_controller/assets/licenses",
     ]
 
     if target == "windows":
@@ -211,6 +213,7 @@ def prepare_deploy_spec(deploy: str, target: str) -> Path:
 
     config["app"]["icon"] = str(native_icon(target).resolve())
     config["app"]["title"] = DISPLAY_NAME
+    config["python"]["packages"] = "Nuitka==4.2.1"
 
     extra_args = shlex.split(config["nuitka"].get("extra_args", ""))
     signing_identity = os.environ.get("MACOS_SIGNING_IDENTITY", "")
@@ -288,7 +291,9 @@ def smoke_test_native(path: Path, target: str) -> None:
     executable = macos_bundle_executable(path) if target == "macos" else path
     env = os.environ.copy()
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
-    run([str(executable), "--smoke-test"], env=env)
+    with tempfile.TemporaryDirectory(prefix="betabrite-native-smoke-") as directory:
+        subprocess.run([str(executable.resolve()), "--smoke-test"], env=env,
+                       cwd=directory, check=True, timeout=120)
 
 
 def sha256(path: Path) -> str:
@@ -371,8 +376,38 @@ def package_linux(source: Path, arch: str) -> list[Path]:
     with tarfile.open(archive, "w:gz") as handle:
         handle.add(package_root, arcname=package_root.name)
 
+    if arch != "x86_64":
+        raise ValueError("The release AppImage currently supports Linux x86_64 only")
+    from appimage import build_appimage
+    desktop = package_root / "dev.grubbs.BetaBriteController.desktop"
+    desktop.write_text(
+        "[Desktop Entry]\nType=Application\nName=BetaBrite Controller\n"
+        "Exec=AppRun\nIcon=dev.grubbs.BetaBriteController\n"
+        "Categories=Utility;\nTerminal=false\n", encoding="utf-8")
+    applications = package_root / "usr" / "share" / "applications"
+    applications.mkdir(parents=True)
+    shutil.copy2(desktop, applications / desktop.name)
+    icons = package_root / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps"
+    icons.mkdir(parents=True)
+    shutil.copy2(LINUX_ICON, icons / LINUX_ICON.name)
+    metadata = package_root / "usr" / "share" / "metainfo"
+    metadata.mkdir(parents=True)
+    (metadata / "dev.grubbs.BetaBriteController.appdata.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<component type="desktop-application"><id>dev.grubbs.BetaBriteController</id>'
+        '<name>BetaBrite Controller</name><summary>Control compatible BetaBrite LED signs</summary>'
+        '<metadata_license>CC0-1.0</metadata_license><project_license>MIT</project_license>'
+        '<launchable type="desktop-id">dev.grubbs.BetaBriteController.desktop</launchable>'
+        '<url type="homepage">https://github.com/grubbs-dev/betabrite-controller</url>'
+        '<developer id="dev.grubbs"><name>Grubbs</name></developer>'
+        '<content_rating type="oars-1.1" />'
+        '<description><p>Compose messages, save favorites, and control compatible BetaBrite LED signs '
+        'through a USB serial adapter. Choose colors, display modes, speed, and special effects.</p></description>'
+        '</component>\n', encoding="utf-8")
+    appimage = DIST / f"BetaBrite-Controller-{__version__}-Linux-{arch}.AppImage"
+    build_appimage(package_root, appimage, ROOT / "build" / "appimage-tools")
     shutil.rmtree(staging_root)
-    return [executable, archive]
+    return [appimage, executable, archive]
 
 
 def notarization_arguments() -> list[str] | None:
@@ -584,11 +619,11 @@ def main() -> int:
     run(command)
 
     if target == "windows":
-        source = newest_candidate([f"{APP_NAME}.exe", "*.exe"], started_at)
+        source = newest_candidate([f"{APP_NAME}.exe"], started_at)
     elif target == "macos":
-        source = newest_candidate([f"{APP_NAME}.app", "*.app"], started_at)
+        source = newest_candidate([f"{APP_NAME}.app", f"{DISPLAY_NAME}.app"], started_at)
     else:
-        source = newest_candidate([f"{APP_NAME}.bin", "*.bin"], started_at)
+        source = newest_candidate([f"{APP_NAME}.bin"], started_at)
 
     smoke_test_native(source, target)
 

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
+import logging
+import platform
+import os
+from dataclasses import asdict, replace
 
-from PySide6 import __version__ as pyside_version
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
@@ -19,6 +21,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
+    QInputDialog,
+    QDialog,
+    QTextBrowser,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -27,42 +33,25 @@ from PySide6.QtWidgets import (
 
 from . import __app_name__, __author__, __tagline__, __version__
 from .branding import application_icon_path
-from .connection import BetaBriteTransportError, ConnectionDiagnostic, probe_connection
-from .controller import BetaBriteController, COLORS, MODES, SPECIALS
+from .connection import ConnectionDiagnostic, probe_connection
+from .controller import COLORS, MODES, SPECIALS
 from .desktop_controls import PRESETS, MessageDraft, can_transmit, display_name
 from .desktop_model import adapter_options, default_adapter_index
 from .devices import AUTO_PORT, diagnose_device, forget_port, remember_port
 from .presentation import connection_view
+from .settings import load_settings, save_settings, DevicePreference
+from .diagnostics import log_path
+from .desktop_worker import Operation
+from .service import transmit
+from .desktop_launcher import build_parser
 
 
 DESKTOP_FILE_NAME = "betabrite-controller"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="betabrite-desktop",
-        description="Portable Qt desktop controller for BetaBrite signs.",
-    )
-    parser.add_argument(
-        "--smoke-test",
-        action="store_true",
-        help="Verify the portable desktop runtime without opening a window",
-    )
-    return parser
-
-
 def smoke_test() -> int:
-    """Verify that PySide6 and the platform-neutral desktop model import."""
-    options = adapter_options()
-    diagnostic = probe_connection(AUTO_PORT)
-    view = connection_view(diagnostic)
-
-    print("BetaBrite portable desktop: OK")
-    print(f"  core:    {__version__}")
-    print(f"  PySide6: {pyside_version}")
-    print(f"  state:   {view.state}")
-    print(f"  adapters:{len(options)}")
-    return 0
+    from .desktop_launcher import smoke_test as run_smoke_test
+    return run_smoke_test()
 
 
 def section_label(text: str) -> QLabel:
@@ -74,8 +63,13 @@ def section_label(text: str) -> QLabel:
 class PortableWindow(QMainWindow):
     """Cross-platform controller UI backed by the stabilized controller core."""
 
-    def __init__(self):
+    def __init__(self, *, passive=False):
         super().__init__()
+        self.busy = False
+        self.operation = None
+        self.manual_port = None
+        self.active_sign = None
+        self.settings = load_settings()
         self.options = []
         self.last_ready_port: str | None = None
         self.connection_ready = False
@@ -84,22 +78,26 @@ class PortableWindow(QMainWindow):
         self.color_buttons: dict[str, QPushButton] = {}
         self.speed_buttons: dict[int, QPushButton] = {}
 
-        self.setWindowTitle(f"{__app_name__} // {__author__}")
+        self.setWindowTitle(__app_name__)
         self.setWindowIcon(QIcon(str(application_icon_path())))
-        self.setMinimumSize(900, 760)
+        self.setMinimumSize(640, 480)
         self.resize(980, 900)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.setCentralWidget(scroll)
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(12, 0, 12, 12)
+        shell_layout.addWidget(scroll, 1)
+        self.setCentralWidget(shell)
 
         root = QWidget()
         scroll.setWidget(root)
 
         layout = QVBoxLayout(root)
         layout.setContentsMargins(28, 26, 28, 26)
-        layout.setSpacing(16)
+        layout.setSpacing(10)
 
         header = QHBoxLayout()
         header.setSpacing(18)
@@ -166,6 +164,30 @@ class PortableWindow(QMainWindow):
         adapter_actions.addWidget(self.forget_button)
         layout.addLayout(adapter_actions)
 
+        self.sign_combo = QComboBox()
+        self.sign_combo.addItem("Saved signs — one sign communicates at a time", None)
+        for name in self.settings.signs:
+            self.sign_combo.addItem(name, name)
+        self.sign_combo.activated.connect(self.select_saved_sign)
+        layout.addWidget(self.sign_combo)
+        actions = QHBoxLayout()
+        for label, callback in (("Manual port…", self.choose_manual_port),
+                                ("Save sign as…", self.save_sign),
+                                ("About / Diagnostics", self.show_diagnostics),
+                                ("Licenses", self.show_licenses)):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            actions.addWidget(button)
+        layout.addLayout(actions)
+        if sys.platform.startswith("linux") and os.environ.get("APPIMAGE"):
+            install_button = QPushButton("Install in application menu")
+            install_button.clicked.connect(self.install_desktop)
+            layout.addWidget(install_button)
+        first_run = QLabel("Power on the sign, connect its USB/serial cable, then click Refresh / Reconnect. "
+                           "If discovery fails, select a manual port. Only one sign is active at a time.")
+        first_run.setWordWrap(True)
+        layout.addWidget(first_run)
+
         layout.addWidget(section_label("MESSAGE"))
 
         self.message = QLineEdit("BRIEF IN PROGRESS")
@@ -175,6 +197,8 @@ class PortableWindow(QMainWindow):
         self.message.returnPressed.connect(self.send_current)
         self.message.textChanged.connect(self.update_send_enabled)
         layout.addWidget(self.message)
+        self.message_hint = QLabel()
+        layout.addWidget(self.message_hint)
 
         layout.addWidget(section_label("COLOR"))
 
@@ -263,11 +287,12 @@ class PortableWindow(QMainWindow):
         options.addStretch(1)
         layout.addLayout(options)
 
-        self.send_button = QPushButton("SEND TO SIGN")
+        self.send_button = QPushButton("Send to Sign")
         self.send_button.setObjectName("sendButton")
         self.send_button.setMinimumHeight(56)
         self.send_button.clicked.connect(self.send_current)
-        layout.addWidget(self.send_button)
+        # Keep the primary action visible even on smaller laptop screens.
+        shell_layout.addWidget(self.send_button)
 
         layout.addWidget(section_label("QUICK TRANSMIT"))
 
@@ -282,6 +307,18 @@ class PortableWindow(QMainWindow):
             )
             preset_row.addWidget(button)
         layout.addLayout(preset_row)
+
+        library = QHBoxLayout()
+        self.library_combo = QComboBox()
+        self.library_combo.activated.connect(self.load_message)
+        library.addWidget(self.library_combo, 1)
+        save_button = QPushButton("Save message…")
+        save_button.clicked.connect(self.save_message)
+        library.addWidget(save_button)
+        remove_button = QPushButton("Delete saved message")
+        remove_button.clicked.connect(self.delete_message)
+        library.addWidget(remove_button)
+        layout.addLayout(library)
 
         self.transmit_status = QLabel("Portable controller ready.")
         self.transmit_status.setWordWrap(True)
@@ -358,8 +395,11 @@ class PortableWindow(QMainWindow):
             """
         )
 
+        self.refresh_button.setText("Refresh / Reconnect")
+        self.restore_draft(self.settings.draft)
+        self.refresh_library()
         self.populate_adapters()
-        self.refresh_connection(active=True)
+        self.refresh_connection(active=not passive)
 
         self.connection_timer = QTimer(self)
         self.connection_timer.setInterval(2000)
@@ -367,6 +407,8 @@ class PortableWindow(QMainWindow):
         self.connection_timer.start()
 
     def selected_port(self) -> str | None:
+        if self.manual_port:
+            return self.manual_port
         index = self.adapter_combo.currentIndex()
         if index < 0 or index >= len(self.options):
             return None
@@ -388,6 +430,13 @@ class PortableWindow(QMainWindow):
                 self.adapter_combo.addItem(option.label)
 
             index = default_adapter_index(self.options)
+            if previous_port is None:
+                from .devices import resolve_device, DeviceDiscoveryError
+                try:
+                    selected = resolve_device().port
+                    index = next((i for i, option in enumerate(self.options) if option.port == selected), -1)
+                except DeviceDiscoveryError:
+                    index = -1
             if previous_port:
                 for candidate, option in enumerate(self.options):
                     if option.port == previous_port:
@@ -395,6 +444,7 @@ class PortableWindow(QMainWindow):
                         break
 
             self.adapter_combo.setCurrentIndex(index)
+            self.adapter_combo.setPlaceholderText("Select a serial adapter")
             self.adapter_combo.setEnabled(True)
             self.remember_button.setEnabled(True)
 
@@ -443,21 +493,39 @@ class PortableWindow(QMainWindow):
         self.update_send_enabled()
 
     def update_send_enabled(self, *_args) -> None:
+        if not hasattr(self, "send_button"):
+            return
         self.send_button.setEnabled(
-            can_transmit(self.connection_ready, self.current_draft())
+            not self.busy and can_transmit(self.connection_ready, self.current_draft())
         )
+        text = self.message.text()
+        self.message_hint.setText(f"{len(text)} characters" +
+                                  (" • Non-ASCII characters display as ?" if not text.isascii() else ""))
 
     def refresh_connection(self, *, active: bool = False, quiet: bool = False) -> None:
+        if self.busy:
+            return
+        if self.active_sign:
+            from .devices import resolve_device, DeviceDiscoveryError
+            current = load_settings()
+            try:
+                selected = resolve_device(settings=replace(current, preferred_device=current.signs[self.active_sign]))
+                self.manual_port = selected.port
+            except (DeviceDiscoveryError, KeyError) as exc:
+                self.last_ready_port = None
+                self.set_connection_view(ConnectionDiagnostic(state="not-found", message=str(exc)))
+                return
+        if active:
+            self.populate_adapters()
+            port = self.selected_port() or AUTO_PORT
+            self.start_operation(lambda: probe_connection(port))
+            return
         port = self.selected_port() or AUTO_PORT
 
-        if active:
-            diagnostic = probe_connection(port)
-            if diagnostic.ready:
-                self.last_ready_port = diagnostic.port
-            else:
-                self.last_ready_port = None
-        else:
-            diagnostic = diagnose_device(port)
+        diagnostic = diagnose_device(port)
+        from .devices import port_is_available
+        if diagnostic.port and not port_is_available(diagnostic.port):
+            diagnostic = ConnectionDiagnostic(state="port-not-found", message="The adapter is disconnected. Reconnect it and click Refresh / Reconnect.", port=diagnostic.port)
 
         display_diagnostic = diagnostic
 
@@ -489,6 +557,8 @@ class PortableWindow(QMainWindow):
             )
 
     def connection_tick(self) -> None:
+        if self.busy:
+            return
         previous_port = self.selected_port()
         self.populate_adapters()
 
@@ -499,6 +569,10 @@ class PortableWindow(QMainWindow):
         self.refresh_connection(active=False, quiet=True)
 
     def on_adapter_changed(self, *_args) -> None:
+        self.manual_port = None
+        self.active_sign = None
+        if hasattr(self, "sign_combo"):
+            self.sign_combo.setCurrentIndex(0)
         self.last_ready_port = None
         self.refresh_connection(active=True)
 
@@ -530,94 +604,220 @@ class PortableWindow(QMainWindow):
             self.populate_adapters()
             self.refresh_connection(active=True)
             self.transmit_status.setText(f"Saved adapter preference for {port}.")
-        except Exception as exc:
-            self.transmit_status.setText(f"Could not save adapter // {exc}")
+        except Exception:
+            self.settings_error()
 
     def forget_saved(self) -> None:
         try:
             forget_port()
+            self.active_sign = None
+            self.manual_port = None
+            self.sign_combo.setCurrentIndex(0)
             self.last_ready_port = None
             self.populate_adapters()
             self.refresh_connection(active=True)
             self.transmit_status.setText("Forgot the saved adapter preference.")
-        except Exception as exc:
-            self.transmit_status.setText(f"Could not forget adapter // {exc}")
+        except Exception:
+            self.settings_error()
 
     def send_current(self) -> None:
+        if self.busy or not self.connection_ready:
+            return
         draft = self.current_draft()
-
         try:
-            kwargs = draft.send_kwargs()
+            draft.validate()
         except ValueError as exc:
             self.transmit_status.setText(str(exc))
             self.update_send_enabled()
             return
-
         port = self.selected_port() or AUTO_PORT
-        diagnostic = probe_connection(port)
-        self.set_connection_view(diagnostic)
+        self.sent_draft = asdict(draft)
+        self.start_operation(lambda: transmit(port, draft))
 
-        if not diagnostic.ready:
-            self.last_ready_port = None
-            self.transmit_status.setText(
-                f"{diagnostic.state.replace('-', ' ').upper()}  //  "
-                f"{diagnostic.message}"
-            )
+    def start_operation(self, callback):
+        if self.busy:
             return
+        self.busy = True
+        self.update_send_enabled()
+        for widget in (self.adapter_combo, self.refresh_button, self.remember_button,
+                       self.forget_button, self.sign_combo):
+            widget.setEnabled(False)
+        self.transmit_status.setText("Working…")
+        self.operation = Operation(callback, self)
+        self.operation.finished.connect(self.operation_finished)
+        self.operation.start()
 
-        self.last_ready_port = diagnostic.port
-        self.send_button.setEnabled(False)
-        self.transmit_status.setText("TRANSMITTING...")
-        QApplication.processEvents()
+    def operation_finished(self):
+        result = self.operation.result
+        self.operation.deleteLater()
+        self.operation = None
+        self.busy = False
+        for widget in (self.adapter_combo, self.refresh_button, self.remember_button,
+                       self.forget_button, self.sign_combo):
+            widget.setEnabled(True)
+        self.last_ready_port = result.port if result.ready else None
+        self.set_connection_view(result)
+        self.transmit_status.setText(result.message)
+        if result.ready and result.source == "transmit":
+            current = load_settings()
+            recent = [self.sent_draft] + [item for item in current.recent_messages if item != self.sent_draft]
+            self.persist(replace(current, draft=self.sent_draft, recent_messages=recent[:20]))
+            self.refresh_library()
 
-        controller = BetaBriteController(port=port)
+    def settings_error(self):
+        logging.getLogger(__name__).exception("Could not save preferences")
+        self.transmit_status.setText("Could not save preferences. Check free disk space and access to your configuration folder. See About / Diagnostics.")
 
+    def persist(self, settings):
         try:
-            controller.send(**kwargs)
-            self.last_ready_port = controller.last_port or diagnostic.port
+            save_settings(settings)
+            self.settings = settings
+            return True
+        except OSError:
+            self.settings_error()
+            return False
 
-            description = (
-                kwargs["message"]
-                if kwargs["message"]
-                else display_name(kwargs["special_name"])
-            )
-            actual_port = controller.last_port or diagnostic.port or port
-            self.transmit_status.setText(
-                f'TRANSMITTED  //  {actual_port}  //  "{description}"  //  '
-                "serial write completed; display ACK unavailable"
-            )
+    def restore_draft(self, value):
+        if not value:
+            return
+        draft = MessageDraft(**value)
+        self.message.setText(draft.message)
+        self.selected_color = draft.color_name
+        self.color_buttons[draft.color_name].setChecked(True)
+        self.selected_speed = draft.speed_level
+        self.speed_buttons[draft.speed_level].setChecked(True)
+        self.mode_combo.setCurrentIndex(self.mode_combo.findData(draft.mode_name))
+        self.special_combo.setCurrentIndex(self.special_combo.findData(draft.special_name))
+        self.flash.setChecked(draft.flash)
+        self.wide.setChecked(draft.wide)
+        self.update_send_enabled()
 
-            ready_diagnostic = ConnectionDiagnostic(
-                state="ready",
-                message=(
-                    f"Serial port {actual_port} transmitted without a transport error."
-                ),
-                port=actual_port,
-                source="transmit",
-            )
-            self.set_connection_view(ready_diagnostic)
+    def refresh_library(self):
+        current = load_settings()
+        self.library_combo.clear()
+        self.library_combo.addItem("Saved and recent messages…", None)
+        for name, draft in current.saved_messages.items():
+            self.library_combo.addItem(f"Saved: {name}", (name, draft))
+        for draft in current.recent_messages:
+            self.library_combo.addItem(f"Recent: {draft['message'][:50] or draft.get('special_name')}", (None, draft))
 
-        except BetaBriteTransportError as exc:
+    def load_message(self):
+        value = self.library_combo.currentData()
+        if value:
+            self.restore_draft(value[1])
+
+    def save_message(self):
+        try:
+            draft = asdict(self.current_draft().validate())
+        except ValueError as exc:
+            self.transmit_status.setText(str(exc))
+            return
+        name, accepted = QInputDialog.getText(self, "Save message", "Message name (reuse a name to update it):")
+        if accepted and name.strip():
+            current = load_settings()
+            self.persist(replace(current, saved_messages={**current.saved_messages, name.strip(): draft}))
+            self.refresh_library()
+
+    def delete_message(self):
+        value = self.library_combo.currentData()
+        if value and value[0]:
+            current = load_settings()
+            messages = dict(current.saved_messages)
+            messages.pop(value[0], None)
+            self.persist(replace(current, saved_messages=messages))
+            self.refresh_library()
+
+    def choose_manual_port(self):
+        if self.busy:
+            return
+        port, accepted = QInputDialog.getText(self, "Manual serial port", "Port (for example COM4 or /dev/ttyUSB0):")
+        if accepted and port.strip():
+            self.active_sign = None
+            self.sign_combo.setCurrentIndex(0)
+            self.manual_port = port.strip()
             self.last_ready_port = None
-            failure = ConnectionDiagnostic(
-                state=exc.state,
-                message=str(exc),
-                port=exc.port or diagnostic.port,
-                source="transmit",
-            )
-            self.set_connection_view(failure)
-            self.transmit_status.setText(
-                f"{exc.state.replace('-', ' ').upper()}  //  {exc}"
-            )
+            self.refresh_connection(active=True)
 
-        except Exception as exc:
+    def save_sign(self):
+        if self.busy or not self.selected_port():
+            return
+        name, accepted = QInputDialog.getText(self, "Save sign", "Friendly sign name (reuse a name to update it):")
+        if accepted and name.strip():
+            try:
+                selection = remember_port(self.selected_port())
+                device = DevicePreference.from_device(selection.device)
+                current = load_settings()
+                if self.persist(replace(current, signs={**current.signs, name.strip(): device})):
+                    self.sign_combo.clear()
+                    self.sign_combo.addItem("Saved signs — one sign communicates at a time", None)
+                    for saved in self.settings.signs:
+                        self.sign_combo.addItem(saved, saved)
+            except Exception:
+                self.settings_error()
+
+    def select_saved_sign(self):
+        if self.busy:
+            return
+        name = self.sign_combo.currentData()
+        if name:
+            self.active_sign = name
+            self.manual_port = None
             self.last_ready_port = None
-            self.connection_ready = False
-            self.update_send_enabled()
-            self.transmit_status.setText(f"TRANSMIT FAILED  //  {exc}")
+            from .devices import resolve_device
+            current = load_settings()
+            preference = current.signs.get(name)
+            try:
+                selection = resolve_device(settings=replace(current, preferred_device=preference))
+                # A saved sign must never silently fall back to another adapter.
+                if selection.source not in {"remembered", "remembered-port"}:
+                    raise ValueError("Saved sign is disconnected. Reconnect its adapter or select a port manually.")
+                self.manual_port = selection.port
+                self.active_sign = name
+                self.persist(replace(current, preferred_device=preference))
+                self.refresh_connection(active=True)
+            except (ValueError, RuntimeError) as exc:
+                self.last_ready_port = None
+                self.set_connection_view(ConnectionDiagnostic(state="not-found", message=str(exc)))
+                self.transmit_status.setText(str(exc))
+
+    def show_diagnostics(self):
+        ports = "\n".join(option.port for option in self.options) or "No USB adapters detected"
+        QMessageBox.information(self, "About / Diagnostics",
+            f"{__app_name__} {__version__}\nMIT License — Copyright 2026 Grubbs\n"
+            "https://github.com/grubbs-dev/betabrite-controller\n\n"
+            f"OS: {platform.system()} {platform.release()}\n"
+            f"Selected: {self.selected_port() or 'Automatic'}\n"
+            f"State: {self.status_badge.text()}\nDetected ports:\n{ports}\n\nLogs: {log_path()}\n"
+            "Dependencies: PySide6 / Qt (LGPLv3), pyserial (BSD), alphasignpy (MIT).")
+
+    def install_desktop(self):
+        from .platform_integration import install_appimage
+        try:
+            install_appimage()
+            QMessageBox.information(self, __app_name__, "Installed for your user. You can now launch BetaBrite Controller from the application menu.")
+        except (OSError, ValueError):
+            logging.getLogger(__name__).exception("Desktop installation failed")
+            QMessageBox.warning(self, __app_name__, "Could not install the application-menu shortcut. Check disk space and permissions for your user application folder.")
+
+    def show_licenses(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Licenses and third-party notices")
+        dialog.resize(760, 560)
+        layout = QVBoxLayout(dialog)
+        text = QTextBrowser()
+        directory = application_icon_path().parent / "licenses"
+        text.setPlainText("\n\n".join(path.name + "\n\n" + path.read_text(encoding="utf-8")
+                                      for path in sorted(directory.glob("*.txt"))))
+        layout.addWidget(text)
+        dialog.exec()
 
     def closeEvent(self, event) -> None:
+        if self.busy:
+            self.transmit_status.setText("Please wait for the current operation before closing.")
+            event.ignore()
+            return
         self.connection_timer.stop()
+        self.persist(replace(load_settings(), draft=asdict(self.current_draft())))
         super().closeEvent(event)
 
 
@@ -634,6 +834,12 @@ def main(argv=None) -> int:
     app.setOrganizationDomain("grubbs.dev")
     app.setDesktopFileName(DESKTOP_FILE_NAME)
     app.setWindowIcon(QIcon(str(application_icon_path())))
+
+    def report_exception(exc_type, exc, traceback):
+        logging.getLogger(__name__).error("Unexpected application error", exc_info=(exc_type, exc, traceback))
+        QMessageBox.warning(None, __app_name__, "The operation could not be completed. Try again or restart the application. Technical details are in the application log.")
+
+    sys.excepthook = report_exception
 
     window = PortableWindow()
     window.show()

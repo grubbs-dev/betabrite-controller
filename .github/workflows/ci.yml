@@ -2,13 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
+  release-hygiene:
+    name: Workflow and security checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Validate workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Scan Git history for secrets
+        run: go run github.com/zricethezav/gitleaks/v8@v8.24.3 git --redact --no-banner
+      - name: Audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c packaging/constraints.txt ".[desktop]" pip-audit
+          python -m pip check
+          python -m pip_audit --progress-spinner off
+
   core:
     name: Core / ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
@@ -56,7 +76,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Check shell syntax
-        run: bash -n install.sh uninstall.sh test.sh scripts/build-release.sh
+        run: |
+          bash -n install.sh uninstall.sh test.sh scripts/build-release.sh \
+            packaging/linux/AppRun packaging/linux/install-desktop.sh \
+            packaging/linux/uninstall-desktop.sh
 
 
   package:
@@ -96,10 +119,11 @@ jobs:
       - name: Verify packaged application icon
         shell: bash
         run: |
+          cd "$RUNNER_TEMP"
           python -c "from betabrite_controller.branding import application_icon_path; assert application_icon_path().is_file()"
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-package
           path: |
@@ -127,5 +151,13 @@ jobs:
       - name: Install portable desktop
         run: python -m pip install ".[desktop]"
 
+      - name: Install Linux graphical runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon-x11-0 libxcb-cursor0
+
       - name: Smoke-test portable desktop
-        run: betabrite-desktop --smoke-test
+        run: |
+          python -m unittest discover -s tests -p "test_*.py" -v
+          betabrite-desktop --smoke-test

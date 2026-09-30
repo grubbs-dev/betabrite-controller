@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2022, macos-15]
 
     steps:
       - name: Check out repository
@@ -64,7 +64,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ccache patchelf
+          sudo apt-get install -y ccache patchelf appstream desktop-file-utils xvfb libegl1 libopengl0 libxkbcommon-x11-0 libxcb-cursor0
 
       - name: Install macOS compiler cache
         if: runner.os == 'macOS'
@@ -73,7 +73,10 @@ jobs:
       - name: Install desktop build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ".[desktop]"
+          python -m pip install -c packaging/constraints.txt ".[desktop]" Nuitka ordered-set zstandard
+
+      - name: Run tests on the native build runtime
+        run: python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Label unsigned desktop artifacts
         shell: bash
@@ -174,6 +177,9 @@ jobs:
           & $signTool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certificate /p $env:CERTIFICATE_PASSWORD $app.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          & $signTool.FullName verify /pa $app.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           $archive = Get-ChildItem "dist/native/betabrite-controller-*-windows-x86_64*.zip" | Select-Object -First 1
           $staging = Join-Path $env:RUNNER_TEMP "betabrite-portable"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
@@ -217,6 +223,8 @@ jobs:
           $installer = Get-ChildItem "dist/native/betabrite-controller-*-windows-x86_64*-setup.exe" | Select-Object -First 1
           & $signTool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certificate /p $env:CERTIFICATE_PASSWORD $installer.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $signTool.FullName verify /pa $installer.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Refresh Windows checksums
         if: runner.os == 'Windows'
@@ -243,6 +251,9 @@ jobs:
             build/linux-package-check/BetaBriteController/install-desktop.sh \
             build/linux-package-check/BetaBriteController/uninstall-desktop.sh
           QT_QPA_PLATFORM=offscreen build/linux-package-check/BetaBriteController/AppRun --smoke-test
+          images=(dist/native/*.AppImage)
+          APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen "${images[0]}" --smoke-test
+          APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=xcb xvfb-run -a "${images[0]}" --smoke-test
 
       - name: Validate packaged Windows application
         if: runner.os == 'Windows'
@@ -254,6 +265,14 @@ jobs:
           & "$destination/BetaBriteController.exe" --smoke-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Get-ChildItem "dist/native/*-setup.exe")) { throw "Windows installer not found." }
+          $installer = Get-ChildItem "dist/native/*-setup.exe" | Select-Object -First 1
+          $installDir = Join-Path $env:RUNNER_TEMP "installed-betabrite"
+          $process = Start-Process $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$installDir`"") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed." }
+          $process = Start-Process (Join-Path $installDir "BetaBriteController.exe") -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installed application smoke test failed." }
+          $process = Start-Process (Join-Path $installDir "unins000.exe") -ArgumentList '/VERYSILENT' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Uninstall failed." }
 
       - name: Validate packaged macOS application
         if: runner.os == 'macOS'
@@ -267,6 +286,19 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "dev.grubbs.BetaBriteController"
           QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/$executable" --smoke-test
           test -f dist/native/*.dmg
+          mount="$RUNNER_TEMP/betabrite-dmg"
+          hdiutil attach dist/native/*.dmg -nobrowse -mountpoint "$mount"
+          QT_QPA_PLATFORM=offscreen "$mount/BetaBrite Controller.app/Contents/MacOS/$executable" --smoke-test
+          hdiutil detach "$mount"
+
+      - name: Remove temporary signing credentials
+        if: always() && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            security delete-keychain "$RUNNER_TEMP/betabrite-build.keychain-db" || true
+          fi
+          python -c 'import os, pathlib; p = pathlib.Path(os.environ["RUNNER_TEMP"]); [f.unlink(missing_ok=True) for pattern in ("betabrite-signing.pfx", "developer-id.p12", "AuthKey_*.p8") for f in p.glob(pattern)]'
 
       - name: List native artifacts
         shell: bash
@@ -278,5 +310,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: native-${{ runner.os }}-${{ runner.arch }}
-          path: dist/native/*
+          path: |
+            dist/native/*-setup.exe
+            dist/native/*.dmg
+            dist/native/*.AppImage
+            dist/native/SHA256SUMS-*
           if-no-files-found: error

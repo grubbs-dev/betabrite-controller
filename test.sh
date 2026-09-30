@@ -3,10 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ -x /opt/betabrite-controller/venv/bin/python ]]; then
-    PYTHON=/opt/betabrite-controller/venv/bin/python
-elif [[ -x /opt/betabrite/venv/bin/python ]]; then
-    PYTHON=/opt/betabrite/venv/bin/python
+if [[ -n "${BETABRITE_PYTHON:-}" ]]; then
+    PYTHON="$BETABRITE_PYTHON"
+elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+    PYTHON="$ROOT/.venv/bin/python"
 else
     PYTHON=python3
 fi

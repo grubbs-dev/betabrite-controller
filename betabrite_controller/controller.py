@@ -136,6 +136,8 @@ class BetaBriteController:
         flash=False,
         wide=False,
     ):
+        if any(ord(character) < 32 or ord(character) == 127 for character in message):
+            raise ValueError("Messages cannot contain protocol control characters")
         if color_name not in COLORS:
             raise ValueError(
                 f"Unknown color: {color_name}"
@@ -230,6 +232,9 @@ class BetaBriteController:
                 timeout=1,
                 dtr=False,
             )
+            # alphasignpy 0.1.1 exposes no write-timeout argument. Bound its
+            # pyserial handle so a disconnected/stalled adapter cannot hang UI shutdown.
+            sign._ser.write_timeout = 5
 
             packet = Packet(
                 type_code=self.type_code,
