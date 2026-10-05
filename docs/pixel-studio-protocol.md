@@ -94,11 +94,23 @@ SMALL DOTS delete packet.
 
 ## Future Live Mode API
 
-The minimal extension point is `betabrite_controller.live.FrameSource`:
+The extension point is `betabrite_controller.live.FrameSource`:
 
 ```text
-FrameSource -> PixelFrame -> renderer/protocol encoder -> sign transport
+FrameSource -> simulation/update -> PixelFrame -> renderer/protocol encoder -> transport
 ```
 
 Future Dino, Snake, Pong, clock, system monitor, and visualizer features should
 produce `PixelFrame` objects without depending on Pixel Studio widgets.
+
+## Live Mode Safety
+
+The proven custom graphics path writes SMALL DOTS PICTURE files. The researched
+documentation and dependency implementation do not prove that repeated writes to
+those files target volatile RAM. They may use persistent sign file storage.
+
+For that reason, Live Mode does **not** rapidly stream physical frames through
+the SMALL DOTS file-write path. Virtual preview, simulated transports, and
+benchmark reporting are supported, but physical live framebuffer output is
+blocked until a protocol-correct volatile update mechanism is proven for the
+target sign.
