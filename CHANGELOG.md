@@ -4,7 +4,17 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
-## Unreleased — Pixel Studio 1.3.0
+## Unreleased — Live Mode 1.4.0
+
+- Live Mode page with local framebuffer preview, source selection, presets, FPS controls, status, and runtime metrics
+- Concrete `FrameSource` contract, `LiveScheduler`, renderer, simulated live transport, monotonic pacing, latency instrumentation, coalescing, and bounded failure handling
+- Original tiny 7-pixel runner source with deterministic physics, jump, gravity, obstacles, score marks, collision, game over, and restart
+- Virtual benchmark diagnostics for static repeat, alternating frame, and moving marker patterns
+- CLI benchmark export with `--live-benchmark-virtual`, `--live-benchmark-blocked-report`, and `--benchmark-report`
+- Explicit physical Live Mode safety block because the confirmed SMALL DOTS graphics path writes sign files and volatile storage has not been proven
+- Headless tests for Live Mode scheduling, Dino gameplay, benchmarks, reports, and Qt Live Mode controls
+
+## [1.3.0] - 2026-10-05
 
 - Pixel Studio for 90 x 7 BetaBrite-compatible pixel artwork
 - UI-independent framebuffer model, animation frames, `.bbpixel` JSON save/load, and local animation preview
