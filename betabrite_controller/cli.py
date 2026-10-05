@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 
 from . import __author__, __version__
@@ -14,6 +15,7 @@ from .controller import (
     MODES,
     SPECIALS,
 )
+from .benchmark import physical_live_benchmark_blocked_report, run_virtual_benchmark_suite
 from .devices import (
     device_matches_preference,
     diagnose_device,
@@ -128,6 +130,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List special animations",
     )
+    parser.add_argument(
+        "--live-benchmark-virtual",
+        action="store_true",
+        help="Run the Live Mode virtual benchmark suite without hardware",
+    )
+    parser.add_argument(
+        "--live-benchmark-blocked-report",
+        action="store_true",
+        help="Print the physical Live Mode safety-block report",
+    )
+    parser.add_argument(
+        "--benchmark-report",
+        metavar="PATH",
+        help="Write benchmark JSON to PATH when used with a benchmark option",
+    )
     return parser
 
 
@@ -206,6 +223,14 @@ def print_connection_check(port: str) -> int:
     return 0 if diagnostic.ready else 2
 
 
+def print_benchmark_report(report, path: str | None = None) -> None:
+    text = report.to_json()
+    if path:
+        report.save(Path(path))
+        print(f"Wrote benchmark report to {path}")
+    print(text)
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -253,6 +278,14 @@ def main(argv=None):
 
     if args.list_special:
         print_items("Available special animations", SPECIALS)
+        return 0
+
+    if args.live_benchmark_virtual:
+        print_benchmark_report(run_virtual_benchmark_suite(), args.benchmark_report)
+        return 0
+
+    if args.live_benchmark_blocked_report:
+        print_benchmark_report(physical_live_benchmark_blocked_report(args.port), args.benchmark_report)
         return 0
 
     if not args.message and not args.special:
