@@ -147,7 +147,7 @@ jobs:
         run: |
           cd release-assets
           manifest="$RUNNER_TEMP/SHA256SUMS.txt"
-          find . -maxdepth 1 -type f \( -name '*-setup.exe' -o -name '*.dmg' -o -name '*.AppImage' \) -printf '%f\n' |
+          find . -maxdepth 1 -type f \( -name '*-Setup.exe' -o -name '*.dmg' -o -name '*.AppImage' \) -printf '%f\n' |
             sort |
             while IFS= read -r artifact; do sha256sum "$artifact"; done \
             > "$manifest"
@@ -161,7 +161,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            release-assets/*-setup.exe release-assets/*.dmg release-assets/*.AppImage release-assets/SHA256SUMS.txt \
+            release-assets/*-Setup.exe release-assets/*.dmg release-assets/*.AppImage release-assets/SHA256SUMS.txt \
             --verify-tag \
             --generate-notes \
             --title "BetaBrite Controller ${GITHUB_REF_NAME}"

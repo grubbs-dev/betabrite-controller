@@ -1,6 +1,6 @@
 # Release checklist
 
-The repository already contains v1.0.0 and v1.1.0 tags. The next prepared version is **1.2.0**. Never move or replace an existing release tag. The sole application version is betabrite_controller/__init__.py.
+The repository already contains v1.0.0, v1.1.0 and v1.2.0 tags. The next prepared version is **1.3.0**. Never move or replace an existing release tag. The sole application version is betabrite_controller/__init__.py.
 
 ## Gates before tagging
 
@@ -47,7 +47,7 @@ git status --short
 On GitHub, run **Native Desktop → Run workflow** for the candidate branch. With GitHub CLI:
 
 ```bash
-gh workflow run native-desktop.yml --ref chore/v1.2.0-release-prep
+gh workflow run native-desktop.yml --ref feat/pixel-studio
 gh run list --workflow native-desktop.yml
 gh run watch RUN_ID --exit-status
 ```
@@ -63,11 +63,11 @@ git switch main
 git pull --ff-only
 git status --short
 python -c "from betabrite_controller import __version__; print(__version__)"
-git tag -a v1.2.0 -m "BetaBrite Controller 1.2.0"
-git push origin v1.2.0
+git tag -a v1.3.0 -m "BetaBrite Controller 1.3.0"
+git push origin v1.3.0
 gh run list --workflow release.yml
 gh run watch RUN_ID --exit-status
-gh release view v1.2.0
+gh release view v1.3.0
 ```
 
 The tag triggers preflight tests, native builds and source/package validation. Only the publish job has repository write permission, and it depends on all required jobs. It uploads three platform downloads and SHA256SUMS.txt. It does not publish partial builds.
