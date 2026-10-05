@@ -23,6 +23,11 @@ jobs:
           python-version: "3.13"
           cache: pip
 
+      - name: Install Linux desktop runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon-x11-0 libxcb-cursor0
+
       - name: Install validation dependencies
         run: |
           python -m pip install --upgrade pip "Pillow==12.3.0"
