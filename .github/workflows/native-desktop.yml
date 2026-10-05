@@ -311,8 +311,5 @@ jobs:
         with:
           name: native-${{ runner.os }}-${{ runner.arch }}
           path: |
-            dist/native/*-Setup.exe
-            dist/native/*.dmg
-            dist/native/*.AppImage
-            dist/native/SHA256SUMS-*
+            dist/native/*
           if-no-files-found: error
