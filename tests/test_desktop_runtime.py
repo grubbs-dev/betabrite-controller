@@ -252,6 +252,40 @@ class DesktopRuntimeTests(unittest.TestCase):
         self.assertEqual(transmit_graphic.call_args.args[0], "COM7")
         self.assertIn("Graphic sent", self.window.pixel_status.text())
 
+    def test_live_mode_navigation_virtual_run_and_benchmark(self):
+        self.window.navigation.setCurrentRow(2)
+        self.assertEqual(self.window.pages.currentIndex(), 2)
+        self.assertIn("VIRTUAL", self.window.live_output_badge.text())
+
+        self.window.live_start()
+        self.assertTrue(self.window.live_scheduler.running)
+        self.assertTrue(self.window.live_timer.isActive())
+        self.window.live_handle_input("jump")
+        self.assertFalse(self.window.live_source.on_ground)
+        self.window.live_tick()
+        self.assertGreater(int(self.window.live_metric_labels["rendered"].text()), 0)
+
+        self.window.live_pause_resume()
+        self.assertTrue(self.window.live_scheduler.paused)
+        self.window.live_pause_resume()
+        self.assertFalse(self.window.live_scheduler.paused)
+        self.window.live_stop()
+        self.assertFalse(self.window.live_scheduler.running)
+        self.assertFalse(self.window.live_timer.isActive())
+
+        self.window.live_run_virtual_benchmark()
+        self.assertIsNotNone(self.window.live_report)
+        self.assertGreater(self.window.live_report.recommended_fps, 0)
+        self.assertIn("Virtual benchmark complete", self.window.live_status.text())
+
+    def test_live_physical_benchmark_is_safety_blocked(self):
+        self.window.manual_port = "COM7"
+        self.window.live_check_physical_benchmark()
+
+        self.assertEqual(self.window.live_report.results[0].status, "blocked")
+        self.assertIn("disabled", self.window.live_status.text())
+        self.assertIn("Hardware blocked", self.window.live_metric_labels["connection"].text())
+
     def test_unplugged_manual_port_clears_ready(self):
         self.window.manual_port = "/dev/nonexistent-betabrite-test"
         self.window.last_ready_port = self.window.manual_port

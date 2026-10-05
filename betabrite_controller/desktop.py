@@ -49,11 +49,14 @@ from . import __app_name__, __version__
 from .branding import application_icon_path
 from .connection import ConnectionDiagnostic, probe_connection
 from .controller import COLORS, MODES, SPECIALS
+from .benchmark import physical_live_benchmark_blocked_report, run_virtual_benchmark_suite
 from .desktop_controls import MessageDraft, can_transmit, display_name
 from .desktop_launcher import build_parser
 from .desktop_model import adapter_options, default_adapter_index
 from .desktop_worker import Operation
 from .devices import AUTO_PORT, diagnose_device, forget_port, remember_port
+from .dino import DinoRunnerSource
+from .live import LiveScheduler
 from .diagnostics import log_path
 from .presentation import connection_view
 from .pixel_model import (
@@ -376,6 +379,10 @@ class PortableWindow(QMainWindow):
         self.pixel_color = PixelColor.RED
         self.pixel_playing = False
         self.pixel_dirty = False
+        self.live_source = DinoRunnerSource()
+        self.live_scheduler: LiveScheduler | None = None
+        self.live_report = None
+        self.live_mode_status = "Virtual preview only."
 
         self.setWindowTitle(__app_name__)
         self.setWindowIcon(QIcon(str(application_icon_path())))
@@ -402,6 +409,10 @@ class PortableWindow(QMainWindow):
 
         self.pixel_timer = QTimer(self)
         self.pixel_timer.timeout.connect(self.pixel_playback_tick)
+
+        self.live_timer = QTimer(self)
+        self.live_timer.setInterval(33)
+        self.live_timer.timeout.connect(self.live_tick)
 
     def _build_actions(self) -> None:
         style = self.style()
@@ -599,7 +610,7 @@ class PortableWindow(QMainWindow):
         self.forget_button = QPushButton("Disconnect")
         self.forget_button.clicked.connect(self.disconnect_selected)
         settings_button = QPushButton("Settings")
-        settings_button.clicked.connect(lambda: self.navigation.setCurrentRow(6))
+        settings_button.clicked.connect(lambda: self.navigation.setCurrentRow(7))
         action_grid.addWidget(self.remember_button, 0, 0)
         action_grid.addWidget(self.forget_button, 0, 1)
         action_grid.addWidget(self.refresh_button, 1, 0)
@@ -616,10 +627,11 @@ class PortableWindow(QMainWindow):
         layout.addWidget(section_label("Navigation"))
         self.navigation = QListWidget()
         self.navigation.setObjectName("navigation")
-        self.navigation.setFixedHeight(136)
+        self.navigation.setFixedHeight(158)
         for text in (
             "Message Editor",
             "Pixel Studio",
+            "Live Mode",
             "Sign Controls",
             "Scheduling",
             "Diagnostics",
@@ -640,6 +652,7 @@ class PortableWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.addWidget(self._build_message_page())
         self.pages.addWidget(self._build_pixel_page())
+        self.pages.addWidget(self._build_live_page())
         self.pages.addWidget(self._placeholder_page("Sign Controls", "Display mode, color, and timing controls are available in Message Editor."))
         self.pages.addWidget(self._placeholder_page("Scheduling", "Scheduling is not active for this sign session."))
         self.pages.addWidget(self._diagnostics_page())
@@ -1021,6 +1034,124 @@ class PortableWindow(QMainWindow):
         self.refresh_pixel_canvas()
         return page
 
+    def _build_live_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(18, 10, 18, 8)
+        layout.setSpacing(8)
+
+        heading = QHBoxLayout()
+        title_box = QVBoxLayout()
+        title = QLabel("Live Mode")
+        title.setObjectName("pageTitle")
+        subtitle = QLabel("Run generated framebuffer sources locally, with hardware streaming gated by protocol safety.")
+        subtitle.setObjectName("muted")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        heading.addLayout(title_box, 1)
+        self.live_output_badge = QLabel("VIRTUAL PREVIEW ONLY")
+        self.live_output_badge.setObjectName("connectionBadge")
+        heading.addWidget(self.live_output_badge)
+        layout.addLayout(heading)
+
+        self.live_preview = PixelPreviewWidget()
+        layout.addWidget(self.live_preview)
+
+        body = QSplitter(Qt.Orientation.Horizontal)
+        controls_panel = QFrame()
+        controls_panel.setObjectName("editorPanel")
+        controls = QVBoxLayout(controls_panel)
+        controls.setContentsMargins(12, 8, 12, 8)
+        controls.setSpacing(7)
+
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel("Source"))
+        self.live_source_combo = QComboBox()
+        self.live_source_combo.addItem("Original tiny runner", "dino")
+        source_row.addWidget(self.live_source_combo, 1)
+        controls.addLayout(source_row)
+
+        preset_row = QHBoxLayout()
+        preset_row.addWidget(QLabel("Preset"))
+        self.live_preset_combo = QComboBox()
+        self.live_preset_combo.addItem("Virtual", "virtual")
+        self.live_preset_combo.addItem("Safe Hardware", "safe-hardware")
+        self.live_preset_combo.addItem("Benchmarked", "benchmarked")
+        self.live_preset_combo.currentIndexChanged.connect(self.live_preset_changed)
+        preset_row.addWidget(self.live_preset_combo, 1)
+        controls.addLayout(preset_row)
+
+        fps_row = QHBoxLayout()
+        fps_row.addWidget(QLabel("Target sign FPS"))
+        self.live_fps = QSpinBox()
+        self.live_fps.setRange(1, 10)
+        self.live_fps.setValue(2)
+        fps_row.addWidget(self.live_fps, 1)
+        controls.addLayout(fps_row)
+
+        button_row = QHBoxLayout()
+        self.live_start_button = QPushButton("Start")
+        self.live_start_button.clicked.connect(self.live_start)
+        self.live_pause_button = QPushButton("Pause")
+        self.live_pause_button.clicked.connect(self.live_pause_resume)
+        self.live_stop_button = QPushButton("Stop")
+        self.live_stop_button.clicked.connect(self.live_stop)
+        button_row.addWidget(self.live_start_button)
+        button_row.addWidget(self.live_pause_button)
+        button_row.addWidget(self.live_stop_button)
+        controls.addLayout(button_row)
+
+        benchmark_row = QHBoxLayout()
+        self.live_virtual_benchmark_button = QPushButton("Run Virtual Benchmark")
+        self.live_virtual_benchmark_button.clicked.connect(self.live_run_virtual_benchmark)
+        self.live_physical_benchmark_button = QPushButton("Check Hardware Benchmark")
+        self.live_physical_benchmark_button.clicked.connect(self.live_check_physical_benchmark)
+        benchmark_row.addWidget(self.live_virtual_benchmark_button)
+        benchmark_row.addWidget(self.live_physical_benchmark_button)
+        controls.addLayout(benchmark_row)
+
+        self.live_status = QLabel("Live Mode ready. Hardware streaming is disabled until a safe volatile update path is proven.")
+        self.live_status.setObjectName("transmitStatus")
+        self.live_status.setWordWrap(True)
+        controls.addWidget(self.live_status)
+        controls.addStretch(1)
+        body.addWidget(controls_panel)
+
+        metrics_panel = QFrame()
+        metrics_panel.setObjectName("editorPanel")
+        metrics_layout = QGridLayout(metrics_panel)
+        metrics_layout.setContentsMargins(12, 8, 12, 8)
+        metrics_layout.setHorizontalSpacing(12)
+        metrics_layout.setVerticalSpacing(7)
+        self.live_metric_labels = {}
+        for row, key in enumerate(
+            (
+                "state",
+                "connection",
+                "actual_fps",
+                "rendered",
+                "transmitted",
+                "dropped",
+                "coalesced",
+                "avg_latency",
+                "latest_latency",
+                "errors",
+            )
+        ):
+            metrics_layout.addWidget(QLabel(display_name(key)), row, 0)
+            value = QLabel("-")
+            value.setObjectName("muted")
+            self.live_metric_labels[key] = value
+            metrics_layout.addWidget(value, row, 1)
+        body.addWidget(metrics_panel)
+        body.setStretchFactor(0, 1)
+        body.setStretchFactor(1, 1)
+        layout.addWidget(body, 1)
+
+        self.live_reset_source()
+        self.live_update_controls()
+        return page
+
     def current_pixel_animation_frame(self):
         return self.pixel_document.frames[self.pixel_frame_index]
 
@@ -1255,6 +1386,129 @@ class PortableWindow(QMainWindow):
         frame = self.current_pixel_frame().duplicate()
         port = self.selected_port() or AUTO_PORT
         self.start_operation(lambda: transmit_graphic(port, frame, label="A"))
+
+    def live_reset_source(self) -> None:
+        self.live_source = DinoRunnerSource()
+        frame = self.live_source.render()
+        if hasattr(self, "live_preview"):
+            self.live_preview.set_frame(frame)
+
+    def live_preset_changed(self, *_args) -> None:
+        preset = self.live_preset_combo.currentData()
+        if preset == "virtual":
+            self.live_fps.setValue(2)
+            self.live_status.setText("Virtual preset selected. Preview runs locally without sign output.")
+        elif preset == "safe-hardware":
+            self.live_fps.setValue(2)
+            self.live_status.setText("Safe Hardware preset is blocked: no volatile live pixel update path is proven.")
+        elif preset == "benchmarked":
+            recommended = int(getattr(self.live_report, "recommended_fps", 0) or 0)
+            if recommended > 0:
+                self.live_fps.setValue(max(1, min(10, recommended)))
+                self.live_status.setText(f"Benchmarked preset loaded: {recommended} FPS.")
+            else:
+                self.live_status.setText("Run a benchmark before using the Benchmarked preset.")
+        self.live_update_controls()
+
+    def live_start(self) -> None:
+        if self.live_scheduler and self.live_scheduler.running:
+            return
+        self.live_reset_source()
+        self.live_scheduler = LiveScheduler(
+            self.live_source,
+            preview_fps=30,
+            target_fps=self.live_fps.value(),
+        )
+        frame = self.live_scheduler.start()
+        self.live_preview.set_frame(frame)
+        self.live_timer.start()
+        self.live_status.setText("Dino running in virtual preview. Space or Up jumps; R restarts; Escape stops.")
+        self.live_update_controls()
+
+    def live_pause_resume(self) -> None:
+        if not self.live_scheduler or not self.live_scheduler.running:
+            return
+        if self.live_scheduler.paused:
+            self.live_scheduler.resume()
+            self.live_status.setText("Live Mode resumed.")
+        else:
+            self.live_scheduler.pause()
+            self.live_status.setText("Live Mode paused.")
+        self.live_update_controls()
+
+    def live_stop(self) -> None:
+        if self.live_scheduler:
+            self.live_scheduler.stop()
+        self.live_timer.stop()
+        self.live_status.setText("Live Mode stopped.")
+        self.live_update_controls()
+
+    def live_tick(self) -> None:
+        if not self.live_scheduler:
+            return
+        frame = self.live_scheduler.tick()
+        if frame:
+            self.live_preview.set_frame(frame)
+        if not self.live_scheduler.running:
+            self.live_timer.stop()
+        self.live_update_controls()
+
+    def live_handle_input(self, action: str) -> None:
+        if self.live_scheduler and self.live_scheduler.running:
+            self.live_scheduler.handle_input(action)
+            if action == "restart":
+                self.live_status.setText("Dino restarted.")
+
+    def live_run_virtual_benchmark(self) -> None:
+        self.live_report = run_virtual_benchmark_suite(duration_seconds=0.5)
+        self.live_status.setText(
+            f"Virtual benchmark complete. Recommended simulated rate: {self.live_report.recommended_fps:.1f} FPS."
+        )
+        self.live_update_controls()
+
+    def live_check_physical_benchmark(self) -> None:
+        port = self.selected_port() or "not connected"
+        self.live_report = physical_live_benchmark_blocked_report(port)
+        self.live_status.setText(self.live_report.safety_note)
+        self.live_update_controls()
+
+    def live_update_controls(self) -> None:
+        if not hasattr(self, "live_start_button"):
+            return
+        scheduler = self.live_scheduler
+        running = bool(scheduler and scheduler.running)
+        paused = bool(scheduler and scheduler.paused)
+        self.live_start_button.setEnabled(not running)
+        self.live_pause_button.setEnabled(running)
+        self.live_pause_button.setText("Resume" if paused else "Pause")
+        self.live_stop_button.setEnabled(running)
+        self.live_fps.setEnabled(not running)
+        self.live_source_combo.setEnabled(not running)
+        self.live_output_badge.setText("STREAMING TO SIGN" if scheduler and scheduler.streaming_to_sign else "VIRTUAL PREVIEW ONLY")
+        self.live_output_badge.setStyleSheet(
+            "QLabel#connectionBadge { color: #a97014; background: #fff6de; }"
+            if not (scheduler and scheduler.streaming_to_sign)
+            else "QLabel#connectionBadge { color: #1f8d4d; background: #e9f6ee; }"
+        )
+        stats = scheduler.statistics if scheduler else None
+        self.live_metric_labels["state"].setText("Paused" if paused else ("Running" if running else "Stopped"))
+        blocked_report = bool(
+            self.live_report
+            and getattr(self.live_report, "results", None)
+            and self.live_report.results[0].status == "blocked"
+        )
+        self.live_metric_labels["connection"].setText(
+            "Hardware blocked" if blocked_report else ("Ready" if self.connection_ready else "No ready sign")
+        )
+        elapsed_frames = stats.frames_rendered if stats else 0
+        self.live_metric_labels["actual_fps"].setText("30 preview / 0 sign" if running else "-")
+        self.live_metric_labels["rendered"].setText(str(elapsed_frames))
+        self.live_metric_labels["transmitted"].setText(str(stats.frames_transmitted if stats else 0))
+        self.live_metric_labels["dropped"].setText(str(stats.frames_dropped if stats else 0))
+        self.live_metric_labels["coalesced"].setText(str(stats.frames_coalesced if stats else 0))
+        self.live_metric_labels["avg_latency"].setText(f"{stats.average_transport_ms:.2f} ms" if stats else "0.00 ms")
+        self.live_metric_labels["latest_latency"].setText(f"{stats.latest_transport_ms:.2f} ms" if stats else "0.00 ms")
+        self.live_metric_labels["errors"].setText(str(stats.errors if stats else 0))
 
     def _font_controls(self) -> QVBoxLayout:
         layout = QVBoxLayout()
@@ -1506,7 +1760,7 @@ class PortableWindow(QMainWindow):
 
     def _show_page(self, row: int) -> None:
         self.pages.setCurrentIndex(max(0, row))
-        if row == 4:
+        if row == 5:
             self._refresh_diagnostics_page()
 
     def selected_port(self) -> str | None:
@@ -1616,6 +1870,8 @@ class PortableWindow(QMainWindow):
             self.forget_adapter_action.setEnabled(not self.busy)
         if hasattr(self, "pixel_send_button"):
             self.pixel_send_button.setEnabled(not self.busy and self.connection_ready)
+        if hasattr(self, "live_start_button"):
+            self.live_update_controls()
         text = self.message.text()
         suffix = " - Non-ASCII characters display as ?" if not text.isascii() else ""
         self.message_hint.setText(f"{len(text)} characters{suffix}")
@@ -2072,6 +2328,22 @@ class PortableWindow(QMainWindow):
         layout.addWidget(text)
         dialog.exec()
 
+    def keyPressEvent(self, event) -> None:
+        if self.pages.currentIndex() == 2 or (self.live_scheduler and self.live_scheduler.running):
+            if event.key() in {Qt.Key.Key_Space, Qt.Key.Key_Up}:
+                self.live_handle_input("jump")
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_R:
+                self.live_handle_input("restart")
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Escape:
+                self.live_stop()
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
     def closeEvent(self, event) -> None:
         if self.busy:
             self.transmit_status.setText("Please wait for the current operation before closing.")
@@ -2080,6 +2352,8 @@ class PortableWindow(QMainWindow):
         self.connection_timer.stop()
         if hasattr(self, "pixel_timer"):
             self.pixel_timer.stop()
+        if hasattr(self, "live_timer"):
+            self.live_timer.stop()
         self.persist(replace(load_settings(), draft=asdict(self.current_draft())))
         super().closeEvent(event)
 
