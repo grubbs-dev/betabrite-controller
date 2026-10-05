@@ -11,7 +11,7 @@ from betabrite_controller.controller import BetaBriteController
 from betabrite_controller.desktop_controls import MessageDraft
 from betabrite_controller.devices import resolve_device, SerialDevice, DeviceNotFoundError
 from betabrite_controller.settings import AppSettings, DevicePreference, save_settings, load_settings, remember_device, forget_device
-from betabrite_controller.service import transmit
+from betabrite_controller.service import clear_sign, transmit
 
 
 class ReleaseBehaviorTests(unittest.TestCase):
@@ -69,6 +69,17 @@ class ReleaseBehaviorTests(unittest.TestCase):
         handle.close.assert_called_once()
         self.assertTrue(result.ready)
         self.assertIn("does not acknowledge", result.message)
+
+    @patch("betabrite_controller.controller.Sign")
+    def test_clear_sign_uses_authoritative_controller_path(self, sign_class):
+        result = clear_sign("COM7")
+        handle = sign_class.return_value
+        handle.open.assert_called_once_with("COM7", baudrate=9600, bytesize=7, parity="E", stopbits=1, timeout=1, dtr=False)
+        payload = handle.send.call_args.args[0].to_bytes()
+        self.assertIn(b" ", payload)
+        handle.close.assert_called_once()
+        self.assertTrue(result.ready)
+        self.assertEqual(result.source, "clear")
 
     @patch("betabrite_controller.controller.Sign")
     def test_transport_is_closed_on_failure(self, sign_class):

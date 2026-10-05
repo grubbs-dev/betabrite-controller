@@ -220,7 +220,7 @@ jobs:
           $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
             Sort-Object FullName -Descending |
             Select-Object -First 1
-          $installer = Get-ChildItem "dist/native/betabrite-controller-*-windows-x86_64*-setup.exe" | Select-Object -First 1
+          $installer = Get-ChildItem "dist/native/BetaBrite-Controller-*-Windows-x64*-Setup.exe" | Select-Object -First 1
           & $signTool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certificate /p $env:CERTIFICATE_PASSWORD $installer.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $signTool.FullName verify /pa $installer.FullName
@@ -264,8 +264,8 @@ jobs:
           Expand-Archive $archive.FullName -DestinationPath $destination -Force
           & "$destination/BetaBriteController.exe" --smoke-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Get-ChildItem "dist/native/*-setup.exe")) { throw "Windows installer not found." }
-          $installer = Get-ChildItem "dist/native/*-setup.exe" | Select-Object -First 1
+          if (-not (Get-ChildItem "dist/native/*-Setup.exe")) { throw "Windows installer not found." }
+          $installer = Get-ChildItem "dist/native/*-Setup.exe" | Select-Object -First 1
           $installDir = Join-Path $env:RUNNER_TEMP "installed-betabrite"
           $process = Start-Process $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$installDir`"") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Installer failed." }
@@ -311,8 +311,5 @@ jobs:
         with:
           name: native-${{ runner.os }}-${{ runner.arch }}
           path: |
-            dist/native/*-setup.exe
-            dist/native/*.dmg
-            dist/native/*.AppImage
-            dist/native/SHA256SUMS-*
+            dist/native/*
           if-no-files-found: error

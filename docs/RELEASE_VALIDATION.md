@@ -1,4 +1,27 @@
-# Release validation — 2026-09-30
+# Release validation — 2026-10-05
+
+## 1.3.0 Pixel Studio candidate
+
+This section must be completed from the final release commit. Current scope:
+Pixel Studio, `.bbpixel` save/load, SMALL DOTS protocol encoding, simulated
+sign payload verification, and renamed Windows installer output. Physical
+BetaBrite hardware validation is not implied unless explicitly added here.
+
+Local validation evidence:
+
+| Gate | Executed check | Result |
+| --- | --- | --- |
+| Focused model/protocol tests | `python -m unittest tests.test_pixel_model tests.test_graphics_protocol -v` | Pass: 15 tests |
+| Qt Pixel Studio and desktop runtime | `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_desktop_runtime -v` | Pass: 11 tests |
+| Complete tests | `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -p 'test_*.py' -v` | Pass: 102 tests |
+| Byte compilation | `python -m compileall -q betabrite_controller scripts tests` | Pass |
+| Dependency metadata | `python -m pip check` | Pass |
+| Source GUI smoke | `QT_QPA_PLATFORM=offscreen python -m betabrite_controller.desktop_launcher --smoke-test` | Pass: BetaBrite Controller 1.3.0, Qt 6.11.2 |
+| Python packages | `python -m build`; `python -m twine check dist/betabrite_controller-1.3.0*` | Pass |
+| Native build dry-run | `python scripts/build-native.py --dry-run` | Blocked locally: host is missing `patchelf`; `sudo dnf install -y patchelf` requires an interactive password |
+| Physical hardware | None | Not tested in this run |
+
+## 1.2.0 native desktop candidate archive
 
 **NOT READY FOR v1.0.0 RELEASE.** That tag already exists. This work prepares the existing **1.2.0** candidate; it is **not ready for an official release** until the external gates below pass.
 

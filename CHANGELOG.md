@@ -4,8 +4,15 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
-## Unreleased — desktop release hardening
+## Unreleased — Pixel Studio 1.3.0
 
+- Pixel Studio for 90 x 7 BetaBrite-compatible pixel artwork
+- UI-independent framebuffer model, animation frames, `.bbpixel` JSON save/load, and local animation preview
+- Protocol-backed SMALL DOTS PICTURE encoder with deterministic byte fixtures
+- READY-gated static graphic transmission through the existing background worker
+- Simulated sign transport for hardware-independent payload verification
+- Protocol documentation for confirmed DOTS behavior and native animation limitations
+- Windows installer naming updated to `BetaBrite-Controller-1.3.0-Windows-x64-Setup.exe` style
 - Background serial operations, duplicate-send protection and bounded write timeout
 - Named signs, manual ports, saved/recent messages and persisted editor settings
 - Safe recovery from malformed settings and atomic private preference writes

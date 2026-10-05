@@ -13,7 +13,7 @@ Linux additionally needs a compiler, matching Python headers and patchelf. Windo
 ## Outputs
 
 Public release downloads are limited to:
-- Windows x64: betabrite-controller-VERSION-windows-x86_64[-unsigned]-setup.exe
+- Windows x64: BetaBrite-Controller-VERSION-Windows-x64[-unsigned]-Setup.exe
 - macOS ARM64: betabrite-controller-VERSION-macos-arm64[-unsigned].dmg
 - Linux x86_64: BetaBrite-Controller-VERSION-Linux-x86_64.AppImage
 - SHA256SUMS.txt
