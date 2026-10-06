@@ -1,29 +1,28 @@
-# Release validation — 2026-10-05
+# Release validation — 2026-10-06
 
-## 1.4.0 Live Mode candidate
+## 1.4.1 physical graphics recovery candidate
 
 This section must be completed from the final release commit. Current scope:
-Live Mode, original tiny runner source, virtual benchmark diagnostics, Pixel
-Studio regression coverage, `.bbpixel` save/load, SMALL DOTS protocol encoding,
-simulated sign payload verification, and renamed Windows installer output.
-Physical BetaBrite hardware validation is not implied unless explicitly added
-here.
+physical Pixel Studio graphics memory initialization, verified SMALL DOTS
+storage/display on the tested BetaBrite/Alpha 213C-1 Series B, Priority TEXT
+recovery, Live Mode safety preservation, and regression coverage for the
+validated hardware sequence.
 
 Local validation evidence:
 
 | Gate | Executed check | Result |
 | --- | --- | --- |
-| Focused Live Mode tests | `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_dino tests.test_live tests.test_benchmark tests.test_desktop_runtime -v` | Pass: 32 tests |
+| Focused graphics tests | `python -m unittest tests.test_graphics_protocol -v` | Pass: 23 tests |
 | Focused model/protocol tests | `python -m unittest tests.test_pixel_model tests.test_graphics_protocol -v` | Covered by complete suite |
-| Qt Pixel Studio and desktop runtime | `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_desktop_runtime -v` | Covered by complete suite |
-| Complete tests | `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -p 'test_*.py' -v` | Pass: 123 tests |
+| Qt Pixel Studio and desktop runtime | `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_desktop_runtime -v` | Pass: 14 tests |
+| Complete tests | `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -p 'test_*.py' -v` | Pass: 141 tests |
 | Byte compilation | `python -m compileall -q betabrite_controller scripts tests` | Pass |
 | Dependency metadata | `python -m pip check` | Pass |
-| Source GUI smoke | `QT_QPA_PLATFORM=offscreen python -m betabrite_controller.desktop_launcher --smoke-test` | Pass: BetaBrite Controller 1.4.0, Qt 6.11.2 |
+| Source GUI smoke | `QT_QPA_PLATFORM=offscreen python -m betabrite_controller.desktop_launcher --smoke-test` | Pass: BetaBrite Controller 1.4.1, Qt 6.11.2 |
 | Live Mode virtual benchmark | `betabrite --live-benchmark-virtual` | Pass: generated benchmark JSON with virtual recommendation |
-| Python packages | `python -m build`; `python -m twine check dist/betabrite_controller-1.4.0*` | Pass |
+| Python packages | `python -m build`; `python -m twine check dist/betabrite_controller-1.4.1*` | Pass |
 | Native build dry-run | `python scripts/build-native.py --dry-run` | Blocked locally: host is missing `patchelf`; `sudo dnf install -y patchelf` requires an interactive password |
-| Physical hardware | `betabrite --status` | Not tested: remembered PL2303 adapter is disconnected |
+| Physical hardware | staged serial validation on `/dev/ttyUSB0`, PL2303 `067b:23a3`, 9600/7E1 | Pass: text recovery, `F$`, DOTS `D`, `JD`, TEXT `B` wrapper, physical 7x7 green X, Return to Text cleanup |
 
 ## 1.2.0 native desktop candidate archive
 

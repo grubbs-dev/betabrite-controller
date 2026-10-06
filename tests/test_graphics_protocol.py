@@ -13,6 +13,7 @@ from betabrite_controller.graphics_protocol import (
     encode_display_graphic,
     encode_graphic,
     encode_graphics_return_to_text,
+    encode_known_good_text,
     encode_minimal_graphics_memory_config,
     encode_read_memory_config,
     encode_read_small_dots,
@@ -23,7 +24,7 @@ from betabrite_controller.graphics_protocol import (
     parse_memory_config_payload,
 )
 from betabrite_controller.pixel_model import AnimationFrame, PixelAnimation, PixelColor, PixelFrame
-from betabrite_controller.service import transmit_graphic
+from betabrite_controller.service import initialize_graphics_support, return_to_text, transmit_graphic
 
 
 def _packet_checksum(packet):
@@ -256,6 +257,42 @@ class GraphicsProtocolTests(unittest.TestCase):
         self.assertFalse(result.ready)
         self.assertEqual(result.state, "graphics-not-initialized")
         self.assertIn("Initialize Graphics Support", result.message)
+
+    @patch("betabrite_controller.graphics_protocol.resolve_port", return_value="COM7")
+    @patch("betabrite_controller.graphics_protocol.Sign")
+    def test_initialize_graphics_support_reads_configures_verifies_and_restores_text(self, sign_class, resolve_port):
+        handle = sign_class.return_value
+        handle.read_response.side_effect = [
+            bytes.fromhex(
+                "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 "
+                "01 30 30 30 02 45 24 41 41 55 37 32 36 32 46 46 30 30 42 41 55 30 30 41 42 "
+                "46 46 30 30 43 41 55 30 30 41 42 46 46 30 30 03 30 38 35 31 04"
+            ),
+            VALID_MEMORY_RESPONSE,
+        ]
+
+        result = initialize_graphics_support("COM7")
+
+        payloads = [call.args[0] for call in handle.send.call_args_list]
+        self.assertEqual(payloads[0].to_bytes(), encode_read_memory_config().to_bytes())
+        self.assertEqual(payloads[1], encode_minimal_graphics_memory_config())
+        self.assertEqual(payloads[2].to_bytes(), encode_read_memory_config().to_bytes())
+        self.assertEqual(payloads[3], encode_known_good_text(text_label="A"))
+        self.assertEqual(payloads[4], encode_known_good_text(text_label="B"))
+        self.assertEqual(payloads[5], encode_known_good_text(text_label="C"))
+        self.assertTrue(result.ready)
+        self.assertEqual(result.source, "graphics-init")
+        self.assertIn("DOTS D is ready", result.message)
+
+    @patch("betabrite_controller.graphics_protocol.resolve_port", return_value="COM7")
+    @patch("betabrite_controller.graphics_protocol.Sign")
+    def test_return_to_text_only_overwrites_wrapper_text(self, sign_class, resolve_port):
+        result = return_to_text("COM7")
+
+        payloads = [call.args[0] for call in sign_class.return_value.send.call_args_list]
+        self.assertEqual(payloads, [encode_graphics_return_to_text()])
+        self.assertTrue(result.ready)
+        self.assertEqual(result.source, "graphics-return")
 
     def test_virtual_transport_captures_exact_payloads(self):
         transport = SimulatedBetaBriteTransport()

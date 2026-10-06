@@ -92,7 +92,7 @@ class NativeBuildHelperTests(unittest.TestCase):
                 "CFBundleExecutable": executable.name,
                 "CFBundleIdentifier": build_native.BUNDLE_IDENTIFIER,
                 "CFBundleName": build_native.DISPLAY_NAME,
-                "CFBundleShortVersionString": "1.4.0",
+                "CFBundleShortVersionString": build_native.__version__,
                 "CFBundleIconFile": "betabrite-controller.icns",
             }
             with (app / "Contents" / "Info.plist").open("wb") as handle:

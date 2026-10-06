@@ -252,6 +252,55 @@ class DesktopRuntimeTests(unittest.TestCase):
         self.assertEqual(transmit_graphic.call_args.args[0], "COM7")
         self.assertIn("Graphic sent", self.window.pixel_status.text())
 
+    def test_pixel_graphics_initialization_and_return_to_text_actions(self):
+        from PySide6.QtWidgets import QMessageBox
+        from betabrite_controller.connection import ConnectionDiagnostic
+
+        self.window.manual_port = "COM7"
+        self.window.set_connection_view(ConnectionDiagnostic(state="ready", message="Ready", port="COM7"))
+        self.window.update_send_enabled()
+        self.assertTrue(self.window.pixel_init_button.isEnabled())
+        self.assertTrue(self.window.pixel_return_text_button.isEnabled())
+
+        with (
+            patch("betabrite_controller.desktop.inspect_graphics_support") as inspect_graphics_support,
+            patch("betabrite_controller.desktop.initialize_graphics_support") as initialize_graphics_support,
+            patch("betabrite_controller.desktop.QMessageBox.warning", return_value=QMessageBox.StandardButton.Yes),
+        ):
+            inspect_graphics_support.return_value = ConnectionDiagnostic(
+                state="ready",
+                message="Graphics support is not initialized.\n\nCurrent memory directory:\nA: TEXT",
+                port="COM7",
+                source="graphics-inspect",
+            )
+            initialize_graphics_support.return_value = ConnectionDiagnostic(
+                state="ready",
+                message="Graphics support initialized",
+                port="COM7",
+                source="graphics-init",
+            )
+
+            self.window.pixel_init_button.click()
+            self._wait_until_idle()
+            self._wait_until_idle()
+
+        inspect_graphics_support.assert_called_once_with("COM7")
+        initialize_graphics_support.assert_called_once_with("COM7")
+        self.assertIn("Graphics support initialized", self.window.pixel_status.text())
+
+        with patch("betabrite_controller.desktop.return_to_text") as return_to_text:
+            return_to_text.return_value = ConnectionDiagnostic(
+                state="ready",
+                message="Returned to text",
+                port="COM7",
+                source="graphics-return",
+            )
+            self.window.pixel_return_text_button.click()
+            self._wait_until_idle()
+
+        return_to_text.assert_called_once_with("COM7")
+        self.assertIn("Returned to text", self.window.pixel_status.text())
+
     def test_live_mode_navigation_virtual_run_and_benchmark(self):
         self.window.navigation.setCurrentRow(2)
         self.assertEqual(self.window.pages.currentIndex(), 2)

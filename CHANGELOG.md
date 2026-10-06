@@ -4,7 +4,17 @@ All notable changes to BetaBrite Controller are documented here.
 
 The project uses semantic versioning for public releases.
 
-## Unreleased — Live Mode 1.4.0
+## [1.4.1] - 2026-10-06
+
+- Physically validated static Pixel Studio graphics on the tested BetaBrite/Alpha 213C-1 Series B
+- Added explicit graphics initialization flow for the A/B/C TEXT + D DOTS memory layout
+- Physical graphics sends now read and verify `F$` memory configuration before writing DOTS data
+- Dedicated DOTS `D` graphics slot and normal TEXT `B` wrapper prevent TEXT/DOTS label confusion
+- Added optional `JD` readback verification path and exact physical byte fixtures
+- Added Return to Text path that overwrites TEXT `B` without touching DOTS `D`, memory configuration, or Priority TEXT `0`
+- Documented validated graphics sequence and the remaining Live Mode physical block
+
+## [1.4.0] - 2026-10-05
 
 - Live Mode page with local framebuffer preview, source selection, presets, FPS controls, status, and runtime metrics
 - Concrete `FrameSource` contract, `LiveScheduler`, renderer, simulated live transport, monotonic pacing, latency instrumentation, coalescing, and bounded failure handling

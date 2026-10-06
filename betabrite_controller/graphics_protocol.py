@@ -28,6 +28,7 @@ CURRENT_TEXT_FILE_SIZES = {
     "B": 0x00AB,
     "C": 0x00AB,
 }
+APP_MANAGED_TEXT_LABELS = ("A", "B", "C")
 
 
 class GraphicsProtocolError(ValueError):
@@ -171,6 +172,22 @@ def has_compatible_graphics_slot(
     return False
 
 
+def format_memory_config_entries(entries: list[MemoryConfigEntry]) -> str:
+    """Return a compact user-facing memory directory summary."""
+    if not entries:
+        return "No configured files reported."
+    lines = []
+    for entry in entries:
+        if entry.is_text:
+            lines.append(f"{entry.label}: TEXT size {entry.size}, timing {entry.suffix}")
+        elif entry.is_dots:
+            rows, cols = entry.dots_dimensions or (0, 0)
+            lines.append(f"{entry.label}: DOTS {rows:02X}x{cols:02X}, color {entry.suffix}")
+        else:
+            lines.append(f"{entry.label}: type {entry.file_type}, size {entry.size}, suffix {entry.suffix}")
+    return "\n".join(lines)
+
+
 def encode_read_memory_config(*, type_code: bytes = b"Z", address: str = "00") -> Packet:
     """Build the documented read-only ``F$`` memory-directory query."""
     return Packet(type_code=type_code, address=address).add(
@@ -273,14 +290,14 @@ def encode_display_graphic(
     return Packet(type_code=type_code, address=address).add(command).to_bytes()
 
 
-def encode_graphics_return_to_text(
+def encode_known_good_text(
     *,
+    text_label: str,
     text: str = "GREEN OK",
-    text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL,
     type_code: bytes = b"Z",
     address: str = "00",
 ) -> bytes:
-    """Overwrite the normal graphics wrapper TEXT file with harmless text."""
+    """Encode a known-good steady green text file."""
     validate_display_text_label(text_label)
     command = WriteText(
         Color.GREEN.value + text.encode("ascii", errors="replace"),
@@ -289,6 +306,17 @@ def encode_graphics_return_to_text(
         mode=DisplayMode.HOLD,
     )
     return Packet(type_code=type_code, address=address).add(command).to_bytes()
+
+
+def encode_graphics_return_to_text(
+    *,
+    text: str = "GREEN OK",
+    text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL,
+    type_code: bytes = b"Z",
+    address: str = "00",
+) -> bytes:
+    """Overwrite the normal graphics wrapper TEXT file with harmless text."""
+    return encode_known_good_text(text_label=text_label, text=text, type_code=type_code, address=address)
 
 
 def encode_static_graphic_sequence(
@@ -430,6 +458,41 @@ class BetaBriteGraphicsController:
                 "Graphics support is not initialized on this sign. "
                 "Run Initialize Graphics Support before sending Pixel Studio artwork."
             )
+
+    def initialize_graphics_support(self) -> list[MemoryConfigEntry]:
+        """Explicitly configure and verify the A/B/C TEXT + D DOTS layout."""
+        sign = None
+        port = resolve_port(self.port)
+        self.last_port = port
+        try:
+            sign = self._open_sign()
+            sign.send(encode_read_memory_config(type_code=self.type_code, address=self.address))
+            current_entries = parse_memory_config_response(sign.read_response(raise_on_timeout=True))
+            if not has_compatible_graphics_slot(current_entries):
+                sign.send(encode_minimal_graphics_memory_config(type_code=self.type_code, address=self.address))
+                sign.send(encode_read_memory_config(type_code=self.type_code, address=self.address))
+                current_entries = parse_memory_config_response(sign.read_response(raise_on_timeout=True))
+                self._require_graphics_slot(current_entries, graphic_label=DEFAULT_CONFIGURED_GRAPHIC_LABEL)
+                for label in APP_MANAGED_TEXT_LABELS:
+                    sign.send(encode_known_good_text(text_label=label, type_code=self.type_code, address=self.address))
+            return current_entries
+        except Exception as exc:
+            if isinstance(exc, GraphicsProtocolError):
+                raise
+            diagnostic = classify_transport_exception(exc, port, source="graphics")
+            if diagnostic is not None:
+                raise BetaBriteTransportError.from_diagnostic(diagnostic) from exc
+            raise
+        finally:
+            if sign is not None:
+                try:
+                    sign.close()
+                except Exception:
+                    pass
+
+    def return_to_text(self) -> None:
+        """Replace the graphics TEXT wrapper without touching DOTS or memory config."""
+        self._send_packets([encode_graphics_return_to_text(type_code=self.type_code, address=self.address)])
 
     def write_graphic(self, frame: PixelFrame, *, label: str = "A") -> None:
         self._send_packets([encode_graphic(frame, label=label, type_code=self.type_code, address=self.address)])
