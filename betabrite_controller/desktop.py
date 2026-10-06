@@ -1385,7 +1385,7 @@ class PortableWindow(QMainWindow):
             return
         frame = self.current_pixel_frame().duplicate()
         port = self.selected_port() or AUTO_PORT
-        self.start_operation(lambda: transmit_graphic(port, frame, label="A"))
+        self.start_operation(lambda: transmit_graphic(port, frame))
 
     def live_reset_source(self) -> None:
         self.live_source = DinoRunnerSource()

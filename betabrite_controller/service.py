@@ -1,7 +1,11 @@
 """Application operations shared with the GUI, using the authoritative controller."""
 from .controller import BetaBriteController
 from .connection import ConnectionDiagnostic
-from .graphics_protocol import BetaBriteGraphicsController
+from .graphics_protocol import (
+    DEFAULT_CONFIGURED_GRAPHIC_LABEL,
+    BetaBriteGraphicsController,
+    GraphicsProtocolError,
+)
 
 
 def transmit(port, draft):
@@ -24,9 +28,17 @@ def clear_sign(port):
     )
 
 
-def transmit_graphic(port, frame, *, label="A"):
+def transmit_graphic(port, frame, *, label=DEFAULT_CONFIGURED_GRAPHIC_LABEL):
     controller = BetaBriteGraphicsController(port=port)
-    controller.send_static_graphic(frame, graphic_label=label)
+    try:
+        controller.send_static_graphic(frame, graphic_label=label)
+    except GraphicsProtocolError as exc:
+        return ConnectionDiagnostic(
+            state="graphics-not-initialized",
+            port=controller.last_port,
+            source="graphics",
+            message=str(exc),
+        )
     return ConnectionDiagnostic(
         state="ready",
         port=controller.last_port,

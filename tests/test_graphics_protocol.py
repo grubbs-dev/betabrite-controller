@@ -12,9 +12,14 @@ from betabrite_controller.graphics_protocol import (
     encode_current_text_memory_config_rollback,
     encode_display_graphic,
     encode_graphic,
+    encode_graphics_return_to_text,
     encode_minimal_graphics_memory_config,
+    encode_read_memory_config,
+    encode_read_small_dots,
     encode_static_graphic_sequence,
     encode_stop_priority_text,
+    has_compatible_graphics_slot,
+    parse_memory_config_response,
     parse_memory_config_payload,
 )
 from betabrite_controller.pixel_model import AnimationFrame, PixelAnimation, PixelColor, PixelFrame
@@ -24,6 +29,23 @@ from betabrite_controller.service import transmit_graphic
 def _packet_checksum(packet):
     etx_index = packet.index(b"\x03")
     return packet[etx_index + 1 : etx_index + 5].decode("ascii")
+
+
+VALID_MEMORY_RESPONSE = bytes.fromhex(
+    "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 "
+    "01 30 30 30 02 "
+    "45 24 41 41 55 30 31 30 30 46 46 30 30 42 41 55 30 30 41 42 46 46 30 30 "
+    "43 41 55 30 30 41 42 46 46 30 30 44 44 55 30 37 30 37 32 30 30 30 "
+    "03 30 41 41 45 04"
+)
+
+VALID_DOTS_D_RESPONSE = bytes.fromhex(
+    "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 "
+    "01 30 30 30 02 "
+    "49 44 30 37 30 37 32 30 30 30 30 30 32 0d 30 32 30 30 30 32 30 0d "
+    "30 30 32 30 32 30 30 0d 30 30 30 32 30 30 30 0d 30 30 32 30 32 30 30 0d "
+    "30 32 30 30 30 32 30 0d 32 30 30 30 30 30 32 0d 03 30 42 30 35 04"
+)
 
 
 class GraphicsProtocolTests(unittest.TestCase):
@@ -118,13 +140,42 @@ class GraphicsProtocolTests(unittest.TestCase):
         self.assertEqual(expected[-1].size, "0707")
         self.assertEqual(expected[-1].suffix, "2000")
 
-    def test_static_graphic_sequence_cleans_stale_priority_without_reactivating_it(self):
-        packets = encode_static_graphic_sequence(self.sample_frame(), graphic_label="A")
+    def test_memory_config_response_parser_and_slot_detection(self):
+        entries = parse_memory_config_response(VALID_MEMORY_RESPONSE)
 
-        self.assertEqual(packets[0], encode_stop_priority_text())
+        self.assertEqual([entry.raw for entry in entries], [
+            "AAU0100FF00",
+            "BAU00ABFF00",
+            "CAU00ABFF00",
+            "DDU07072000",
+        ])
+        self.assertTrue(has_compatible_graphics_slot(entries))
+        self.assertFalse(has_compatible_graphics_slot(entries, graphic_label="E"))
+
+    def test_read_memory_config_query_is_read_only_fixture(self):
+        self.assertEqual(
+            encode_read_memory_config().to_bytes(),
+            bytes.fromhex("0000000000015a303002ff462404"),
+        )
+
+    def test_return_to_text_overwrites_wrapper_without_touching_dots(self):
+        packet = encode_graphics_return_to_text()
+        self.assertEqual(
+            packet,
+            bytes.fromhex("0000000000015a303002ff41421b26621c32475245454e204f4b033033413404"),
+        )
+        self.assertNotIn(b"\x14D", packet)
+        self.assertNotIn(b"ID", packet)
+        self.assertNotIn(b"E$", packet)
+
+    def test_static_graphic_sequence_cleans_stale_priority_without_reactivating_it(self):
+        packets = encode_static_graphic_sequence(self.sample_frame())
+
+        self.assertEqual(len(packets), 2)
+        self.assertIn(b"ID", packets[0])
         display_packet = packets[-1]
-        self.assertIn(b"AB\x1b&b\x14A", display_packet)
-        self.assertNotIn(b"A0\x1b&b\x14A", b"".join(packets))
+        self.assertIn(b"AB\x1b&b\x14D", display_packet)
+        self.assertNotIn(b"A0", b"".join(packets))
 
     def test_rejects_invalid_dimensions_and_labels(self):
         with self.assertRaises(GraphicsProtocolError):
@@ -152,26 +203,65 @@ class GraphicsProtocolTests(unittest.TestCase):
     @patch("betabrite_controller.graphics_protocol.resolve_port", return_value="COM7")
     @patch("betabrite_controller.graphics_protocol.Sign")
     def test_service_transmits_static_graphic_packets(self, sign_class, resolve_port):
-        result = transmit_graphic("COM7", self.sample_frame(), label="A")
+        handle = sign_class.return_value
+        handle.read_response.return_value = VALID_MEMORY_RESPONSE
+
+        result = transmit_graphic("COM7", self.sample_frame())
+
         handle = sign_class.return_value
         handle.open.assert_called_once_with("COM7", baudrate=9600, bytesize=7, parity="E", stopbits=1, timeout=1, dtr=False)
         self.assertEqual(handle._ser.write_timeout, 5)
         payloads = [call.args[0] for call in handle.send.call_args_list]
-        self.assertEqual(payloads, [
-            encode_stop_priority_text(),
-            encode_graphic(self.sample_frame(), label="A"),
-            encode_display_graphic(graphic_label="A"),
+        self.assertEqual(payloads[0].to_bytes(), encode_read_memory_config().to_bytes())
+        self.assertEqual(payloads[1:], [
+            encode_graphic(self.sample_frame(), label=DEFAULT_CONFIGURED_GRAPHIC_LABEL),
+            encode_display_graphic(graphic_label=DEFAULT_CONFIGURED_GRAPHIC_LABEL),
         ])
         handle.close.assert_called_once()
         self.assertTrue(result.ready)
         self.assertEqual(result.source, "graphics")
+
+    @patch("betabrite_controller.graphics_protocol.resolve_port", return_value="COM7")
+    @patch("betabrite_controller.graphics_protocol.Sign")
+    def test_controller_can_verify_dots_readback_before_wrapper(self, sign_class, resolve_port):
+        handle = sign_class.return_value
+        handle.read_response.side_effect = [VALID_MEMORY_RESPONSE, VALID_DOTS_D_RESPONSE]
+        from betabrite_controller.graphics_protocol import BetaBriteGraphicsController
+
+        BetaBriteGraphicsController(port="COM7").send_static_graphic(
+            self.sample_frame(),
+            verify_readback=True,
+        )
+
+        payloads = [call.args[0] for call in handle.send.call_args_list]
+        self.assertEqual(payloads[0].to_bytes(), encode_read_memory_config().to_bytes())
+        self.assertEqual(payloads[1], encode_graphic(self.sample_frame(), label=DEFAULT_CONFIGURED_GRAPHIC_LABEL))
+        self.assertEqual(payloads[2].to_bytes(), encode_read_small_dots().to_bytes())
+        self.assertEqual(payloads[3], encode_display_graphic(graphic_label=DEFAULT_CONFIGURED_GRAPHIC_LABEL))
+
+    @patch("betabrite_controller.graphics_protocol.resolve_port", return_value="COM7")
+    @patch("betabrite_controller.graphics_protocol.Sign")
+    def test_service_blocks_graphics_without_dots_allocation(self, sign_class, resolve_port):
+        sign_class.return_value.read_response.return_value = bytes.fromhex(
+            "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 "
+            "01 30 30 30 02 45 24 41 41 55 37 32 36 32 46 46 30 30 42 41 55 30 30 41 42 "
+            "46 46 30 30 43 41 55 30 30 41 42 46 46 30 30 03 30 38 35 31 04"
+        )
+
+        result = transmit_graphic("COM7", self.sample_frame())
+
+        payloads = [call.args[0] for call in sign_class.return_value.send.call_args_list]
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(payloads[0].to_bytes(), encode_read_memory_config().to_bytes())
+        self.assertFalse(result.ready)
+        self.assertEqual(result.state, "graphics-not-initialized")
+        self.assertIn("Initialize Graphics Support", result.message)
 
     def test_virtual_transport_captures_exact_payloads(self):
         transport = SimulatedBetaBriteTransport()
         frame = self.sample_frame()
         transport.send_static_graphic(frame, graphic_label="A")
         self.assertEqual(transport.payloads, [
-            encode_stop_priority_text(),
             encode_graphic(frame, label="A"),
             encode_display_graphic(graphic_label="A"),
         ])

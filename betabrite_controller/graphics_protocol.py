@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from alphasign import DisplayMode, DisplayPosition, Packet, Sign, SignType, WriteText
-from alphasign.protocol import EOT, SOH, STX, SYNC
-from alphasign.commands.dots import WriteSmallDots
-from alphasign.commands.special import WriteSpecialFunction
-from alphasign.protocol import DotsColorDepth, FileProtection, FileType
+from alphasign import Color, DisplayMode, DisplayPosition, Packet, Sign, SignType, WriteText
+from alphasign.protocol import EOT, ETX, SOH, STX, SYNC
+from alphasign.commands.dots import ReadSmallDots, WriteSmallDots
+from alphasign.commands.special import ReadSpecialFunction, WriteSpecialFunction
+from alphasign.protocol import DotsColorDepth, FileProtection, FileType, SpecialFunction
 
 from .connection import BetaBriteTransportError, classify_transport_exception
 from .devices import AUTO_PORT, resolve_port
@@ -19,6 +19,8 @@ DEFAULT_GRAPHIC_LABELS = "ABCDEFGHIJKLMNPQRSTUVWXYZ"
 CALL_SMALL_DOTS = b"\x14"
 DEFAULT_GRAPHIC_TEXT_LABEL = "B"
 DEFAULT_CONFIGURED_GRAPHIC_LABEL = "D"
+DEFAULT_GRAPHIC_SIZE = (7, 7)
+DEFAULT_GRAPHIC_COLOR_STATUS = "2000"
 PRIORITY_TEXT_LABEL = "0"
 STOP_PRIORITY_TEXT_PACKET = b"\x00\x00\x00\x00\x00\x01Z00\x02A0\x04"
 CURRENT_TEXT_FILE_SIZES = {
@@ -51,6 +53,20 @@ class MemoryConfigEntry:
     @property
     def raw(self) -> str:
         return f"{self.label}{self.file_type}{self.protection}{self.size}{self.suffix}"
+
+    @property
+    def is_text(self) -> bool:
+        return self.file_type == FileType.TEXT.value.decode("ascii")
+
+    @property
+    def is_dots(self) -> bool:
+        return self.file_type == FileType.DOTS.value.decode("ascii")
+
+    @property
+    def dots_dimensions(self) -> tuple[int, int] | None:
+        if not self.is_dots:
+            return None
+        return int(self.size[:2], 16), int(self.size[2:], 16)
 
 
 def validate_graphic_label(label: str) -> None:
@@ -115,6 +131,65 @@ def parse_memory_config_payload(payload: bytes | str) -> list[MemoryConfigEntry]
     return entries
 
 
+def parse_sign_response_payload(response: bytes, *, expected_command: bytes | None = None) -> tuple[bytes, str, str]:
+    """Return ``(payload, received_checksum, calculated_checksum)`` from a sign response."""
+    try:
+        soh_index = response.index(SOH)
+        stx_index = response.index(STX, soh_index)
+        etx_index = response.index(ETX, stx_index)
+    except ValueError as exc:
+        raise GraphicsProtocolError("Sign response is missing protocol framing") from exc
+    payload = response[stx_index + 1 : etx_index]
+    received = response[etx_index + 1 : etx_index + 5].decode("ascii")
+    calculated = f"{sum(response[stx_index:etx_index + 1]) % 65536:04X}"
+    if received != calculated:
+        raise GraphicsProtocolError(
+            f"Sign response checksum mismatch: received {received}, calculated {calculated}"
+        )
+    if expected_command is not None and not payload.startswith(expected_command):
+        raise GraphicsProtocolError(f"Unexpected sign response payload: {payload!r}")
+    return payload, received, calculated
+
+
+def parse_memory_config_response(response: bytes) -> list[MemoryConfigEntry]:
+    payload, _received, _calculated = parse_sign_response_payload(response, expected_command=b"E$")
+    return parse_memory_config_payload(payload)
+
+
+def has_compatible_graphics_slot(
+    entries: list[MemoryConfigEntry],
+    *,
+    graphic_label: str = DEFAULT_CONFIGURED_GRAPHIC_LABEL,
+    size: tuple[int, int] = DEFAULT_GRAPHIC_SIZE,
+    color_status: str = DEFAULT_GRAPHIC_COLOR_STATUS,
+) -> bool:
+    """Return whether memory config contains the expected dedicated DOTS slot."""
+    validate_graphic_memory_labels(text_labels=("A", DEFAULT_GRAPHIC_TEXT_LABEL, "C"), graphic_label=graphic_label)
+    for entry in entries:
+        if entry.label == graphic_label and entry.is_dots:
+            return entry.dots_dimensions == size and entry.suffix == color_status
+    return False
+
+
+def encode_read_memory_config(*, type_code: bytes = b"Z", address: str = "00") -> Packet:
+    """Build the documented read-only ``F$`` memory-directory query."""
+    return Packet(type_code=type_code, address=address).add(
+        ReadSpecialFunction(SpecialFunction.MEMORY_CONFIG),
+        checksum=False,
+    )
+
+
+def encode_read_small_dots(
+    *,
+    label: str = DEFAULT_CONFIGURED_GRAPHIC_LABEL,
+    type_code: bytes = b"Z",
+    address: str = "00",
+) -> Packet:
+    """Build the documented read-only SMALL DOTS query for diagnostics."""
+    validate_graphic_label(label)
+    return Packet(type_code=type_code, address=address).add(ReadSmallDots(label), checksum=False)
+
+
 def encode_stop_priority_text(*, type_code: bytes = b"Z", address: str = "00") -> bytes:
     """Encode the documented command that disables Priority TEXT file 0."""
     if type_code == b"Z" and address == "00":
@@ -144,7 +219,7 @@ def encode_minimal_graphics_memory_config(
             "label": graphic_label,
             "type": FileType.DOTS,
             "protection": FileProtection.UNLOCKED,
-            "size": (7, 7),
+            "size": DEFAULT_GRAPHIC_SIZE,
             "color_depth": DotsColorDepth.THREE_COLOR,
         },
     ]
@@ -198,17 +273,34 @@ def encode_display_graphic(
     return Packet(type_code=type_code, address=address).add(command).to_bytes()
 
 
+def encode_graphics_return_to_text(
+    *,
+    text: str = "GREEN OK",
+    text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL,
+    type_code: bytes = b"Z",
+    address: str = "00",
+) -> bytes:
+    """Overwrite the normal graphics wrapper TEXT file with harmless text."""
+    validate_display_text_label(text_label)
+    command = WriteText(
+        Color.GREEN.value + text.encode("ascii", errors="replace"),
+        label=text_label,
+        position=DisplayPosition.FILL,
+        mode=DisplayMode.HOLD,
+    )
+    return Packet(type_code=type_code, address=address).add(command).to_bytes()
+
+
 def encode_static_graphic_sequence(
     frame: PixelFrame,
     *,
-    graphic_label: str = "A",
+    graphic_label: str = DEFAULT_CONFIGURED_GRAPHIC_LABEL,
     text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL,
     type_code: bytes = b"Z",
     address: str = "00",
 ) -> list[bytes]:
     """Return packets needed to store and display one SMALL DOTS graphic."""
     return [
-        encode_stop_priority_text(type_code=type_code, address=address),
         encode_graphic(frame, label=graphic_label, type_code=type_code, address=address),
         encode_display_graphic(
             graphic_label=graphic_label,
@@ -295,31 +387,108 @@ class BetaBriteGraphicsController:
             except Exception:
                 pass
 
+    def _open_sign(self):
+        port = resolve_port(self.port)
+        self.last_port = port
+        sign = Sign(sign_type=SignType.ALL, address=self.address)
+        sign.open(
+            port,
+            baudrate=9600,
+            bytesize=7,
+            parity="E",
+            stopbits=1,
+            timeout=1,
+            dtr=False,
+        )
+        sign._ser.write_timeout = 5
+        return sign
+
+    def read_memory_config(self) -> list[MemoryConfigEntry]:
+        sign = None
+        port = resolve_port(self.port)
+        self.last_port = port
+        try:
+            sign = self._open_sign()
+            sign.send(encode_read_memory_config(type_code=self.type_code, address=self.address))
+            response = sign.read_response(raise_on_timeout=True)
+            return parse_memory_config_response(response)
+        except Exception as exc:
+            diagnostic = classify_transport_exception(exc, port, source="graphics")
+            if diagnostic is not None:
+                raise BetaBriteTransportError.from_diagnostic(diagnostic) from exc
+            raise
+        finally:
+            if sign is not None:
+                try:
+                    sign.close()
+                except Exception:
+                    pass
+
+    def _require_graphics_slot(self, entries: list[MemoryConfigEntry], *, graphic_label: str) -> None:
+        if not has_compatible_graphics_slot(entries, graphic_label=graphic_label):
+            raise GraphicsProtocolError(
+                "Graphics support is not initialized on this sign. "
+                "Run Initialize Graphics Support before sending Pixel Studio artwork."
+            )
+
     def write_graphic(self, frame: PixelFrame, *, label: str = "A") -> None:
         self._send_packets([encode_graphic(frame, label=label, type_code=self.type_code, address=self.address)])
 
-    def display_graphic(self, *, graphic_label: str = "A", text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL) -> None:
-        self._send_packets(
-            [
-                encode_stop_priority_text(type_code=self.type_code, address=self.address),
-                encode_display_graphic(
-                    graphic_label=graphic_label,
-                    text_label=text_label,
-                    type_code=self.type_code,
-                    address=self.address,
-                )
-            ]
-        )
-
-    def send_static_graphic(self, frame: PixelFrame, *, graphic_label: str = "A") -> None:
-        self._send_packets(
-            encode_static_graphic_sequence(
-                frame,
+    def display_graphic(
+        self,
+        *,
+        graphic_label: str = DEFAULT_CONFIGURED_GRAPHIC_LABEL,
+        text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL,
+    ) -> None:
+        self._send_packets([
+            encode_display_graphic(
                 graphic_label=graphic_label,
+                text_label=text_label,
                 type_code=self.type_code,
                 address=self.address,
             )
-        )
+        ])
+
+    def send_static_graphic(
+        self,
+        frame: PixelFrame,
+        *,
+        graphic_label: str = DEFAULT_CONFIGURED_GRAPHIC_LABEL,
+        verify_readback: bool = False,
+    ) -> None:
+        sign = None
+        port = resolve_port(self.port)
+        self.last_port = port
+        try:
+            sign = self._open_sign()
+            sign.send(encode_read_memory_config(type_code=self.type_code, address=self.address))
+            entries = parse_memory_config_response(sign.read_response(raise_on_timeout=True))
+            self._require_graphics_slot(entries, graphic_label=graphic_label)
+            sign.send(encode_graphic(frame, label=graphic_label, type_code=self.type_code, address=self.address))
+            if verify_readback:
+                sign.send(encode_read_small_dots(label=graphic_label, type_code=self.type_code, address=self.address))
+                parse_sign_response_payload(sign.read_response(raise_on_timeout=True), expected_command=b"I" + graphic_label.encode())
+            sign.send(
+                encode_display_graphic(
+                    graphic_label=graphic_label,
+                    text_label=DEFAULT_GRAPHIC_TEXT_LABEL,
+                    type_code=self.type_code,
+                    address=self.address,
+                )
+            )
+        except Exception as exc:
+            if isinstance(exc, GraphicsProtocolError):
+                raise
+            diagnostic = classify_transport_exception(exc, port, source="graphics")
+            if diagnostic is not None:
+                raise BetaBriteTransportError.from_diagnostic(diagnostic) from exc
+            raise
+        finally:
+            if sign is not None:
+                try:
+                    sign.close()
+                except Exception:
+                    pass
 
 
 class SimulatedBetaBriteTransport:
@@ -328,5 +497,5 @@ class SimulatedBetaBriteTransport:
     def __init__(self):
         self.payloads: list[bytes] = []
 
-    def send_static_graphic(self, frame: PixelFrame, *, graphic_label: str = "A") -> None:
+    def send_static_graphic(self, frame: PixelFrame, *, graphic_label: str = DEFAULT_CONFIGURED_GRAPHIC_LABEL) -> None:
         self.payloads.extend(encode_static_graphic_sequence(frame, graphic_label=graphic_label))
