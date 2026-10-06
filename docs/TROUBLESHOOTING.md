@@ -45,7 +45,7 @@ Enable execution in file Properties and ensure the download is on a filesystem t
 Advanced diagnostic fallback:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./BetaBrite-Controller-1.4.0-Linux-x86_64.AppImage --smoke-test
+APPIMAGE_EXTRACT_AND_RUN=1 ./BetaBrite-Controller-1.4.1-Linux-x86_64.AppImage --smoke-test
 ```
 
 An older distribution may also lack the system libraries required by Qt or the compiler runtime. CI's baseline is Ubuntu 24.04; local Fedora builds do not prove compatibility with that baseline.

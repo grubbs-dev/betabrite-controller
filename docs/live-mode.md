@@ -45,10 +45,12 @@ unbounded backlog of historical frames.
 
 ## Hardware Safety
 
-The confirmed BetaBrite custom graphics path writes **SMALL DOTS PICTURE files**
-and then references those files from TEXT files. The available documentation and
-the current implementation do **not** prove that those repeated writes target
-volatile RAM.
+The validated BetaBrite static graphics path writes **SMALL DOTS PICTURE
+files** and then references those files from TEXT files. Physical testing on the
+tested BetaBrite/Alpha 213C-1 Series B proves the static sequence only after a
+compatible DOTS file is allocated first. The available documentation and the
+current implementation do **not** prove that repeated writes target volatile
+RAM.
 
 Because the write path may use persistent sign file storage, BetaBrite
 Controller **does not use SMALL DOTS writes for rapid physical Live Mode
@@ -83,4 +85,3 @@ betabrite --live-benchmark-blocked-report --port COM7
 
 Do not interpret virtual FPS as physical sign FPS. A physical update rate should
 only be recommended after a safe volatile transport is confirmed and benchmarked.
-

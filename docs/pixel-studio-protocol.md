@@ -12,14 +12,17 @@ physical sign validation.
   packet framing, checksums, TEXT files, and SMALL DOTS PICTURE files using the
   same command codes described by the protocol manual.
 
-## Confirmed Mechanism
+## Protocol Surface
 
-Pixel Studio uses **SMALL DOTS PICTURE** files.
+Pixel Studio can encode and display **SMALL DOTS PICTURE** files according to
+the Alpha protocol. This sequence is physically validated on the tested
+BetaBrite/Alpha 213C-1 Series B when a compatible DOTS file is explicitly
+allocated in the sign memory directory first.
 
 - Write command: `I` (`49H`)
 - Read command: `J` (`4AH`) is documented but not exposed in this release.
-- Display mechanism: a normal TEXT file calls a stored SMALL DOTS PICTURE with
-  control code `14H` followed by the picture file label.
+- Proven display mechanism: a normal TEXT file calls a stored SMALL DOTS
+  PICTURE with control code `14H` followed by the picture file label.
 - Maximum documented SMALL DOTS size: **31 rows x 255 columns**.
 - Width and height are encoded as two ASCII hexadecimal bytes each.
 - The sign requires at least a 100 ms pause after the width bytes and before row
@@ -62,15 +65,25 @@ The established serial path remains:
 - Type code: `Z` (all signs)
 - Serial: 9600 baud, 7 data bits, even parity, 1 stop bit, DTR disabled
 
-## Static Transmission Sequence
+## Static Transmission Status
 
-For a static frame, Pixel Studio sends two protocol packets:
+The proven physical sequence is:
 
-1. Write a SMALL DOTS PICTURE file to label `A`.
-2. Write the priority TEXT file (`0`) containing `14H` + `A`, in HOLD mode, so
-   the sign displays the stored picture.
+1. Configure memory with TEXT `A`, TEXT `B`, TEXT `C`, and DOTS `D`
+   (`07 x 07`, 3-color status `2000`).
+2. Verify the memory directory with read-only `F$`.
+3. Write the SMALL DOTS PICTURE file to DOTS label `D`.
+4. Optionally verify the stored graphic with read-only `JD`.
+5. Write normal TEXT wrapper `B` containing HOLD mode and `14H` + `D`.
 
-This is deterministic and unit tested with exact byte fixtures.
+Physical testing showed that writing or invoking a DOTS graphic without first
+allocating a DOTS file can leave the literal label visible through the wrapper.
+The invocation mechanism itself is valid once the DOTS file is configured.
+
+Production physical sends must read the memory directory first and block if the
+compatible DOTS `D` slot is missing. Memory configuration is destructive and
+must be handled by an explicit Initialize Graphics Support workflow, never as a
+side effect of pressing Send to Sign.
 
 ## Animation
 
@@ -87,10 +100,11 @@ work and is separate from native stored sign animation.
 
 ## Delete/Replace
 
-Replacing a graphic is supported by writing a new SMALL DOTS PICTURE to the same
-label. A standalone delete command is not exposed because deletion appears to be
-handled through model-specific memory configuration rather than a simple proven
-SMALL DOTS delete packet.
+Replacing a graphic writes a new SMALL DOTS PICTURE to the same label. A
+standalone delete command is not exposed because deletion appears to be handled
+through model-specific memory configuration rather than a simple proven SMALL
+DOTS delete packet. Returning from graphics to normal text should overwrite or
+deactivate the normal TEXT wrapper and should not rewrite DOTS unnecessarily.
 
 ## Future Live Mode API
 
@@ -105,9 +119,10 @@ produce `PixelFrame` objects without depending on Pixel Studio widgets.
 
 ## Live Mode Safety
 
-The proven custom graphics path writes SMALL DOTS PICTURE files. The researched
-documentation and dependency implementation do not prove that repeated writes to
-those files target volatile RAM. They may use persistent sign file storage.
+The researched custom graphics path writes SMALL DOTS PICTURE files. Physical
+static graphics are proven, but the available documentation and dependency
+implementation do not prove that repeated writes to those files target volatile
+RAM. They may use persistent sign file storage.
 
 For that reason, Live Mode does **not** rapidly stream physical frames through
 the SMALL DOTS file-write path. Virtual preview, simulated transports, and

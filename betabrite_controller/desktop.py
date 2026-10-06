@@ -66,7 +66,14 @@ from .pixel_model import (
     PixelDocument,
     PixelDocumentError,
 )
-from .service import clear_sign, transmit, transmit_graphic
+from .service import (
+    clear_sign,
+    initialize_graphics_support,
+    inspect_graphics_support,
+    return_to_text,
+    transmit,
+    transmit_graphic,
+)
 from .settings import DevicePreference, load_settings, save_settings
 
 
@@ -1019,6 +1026,12 @@ class PortableWindow(QMainWindow):
         self.pixel_send_button.setObjectName("sendButton")
         self.pixel_send_button.clicked.connect(self.pixel_send_to_sign)
         timeline_layout.addWidget(self.pixel_send_button)
+        self.pixel_init_button = QPushButton("Initialize Graphics Support")
+        self.pixel_init_button.clicked.connect(self.pixel_initialize_graphics_support)
+        timeline_layout.addWidget(self.pixel_init_button)
+        self.pixel_return_text_button = QPushButton("Return to Text")
+        self.pixel_return_text_button.clicked.connect(self.pixel_return_to_text)
+        timeline_layout.addWidget(self.pixel_return_text_button)
         self.pixel_status = QLabel("Pixel Studio ready.")
         self.pixel_status.setObjectName("transmitStatus")
         self.pixel_status.setWordWrap(True)
@@ -1171,6 +1184,10 @@ class PortableWindow(QMainWindow):
         self.pixel_status.setText(message or default)
         if hasattr(self, "pixel_send_button"):
             self.pixel_send_button.setEnabled(not self.busy and self.connection_ready)
+        if hasattr(self, "pixel_init_button"):
+            pixel_controls_enabled = not self.busy and self.connection_ready
+            self.pixel_init_button.setEnabled(pixel_controls_enabled)
+            self.pixel_return_text_button.setEnabled(pixel_controls_enabled)
 
     def refresh_pixel_timeline(self) -> None:
         if not hasattr(self, "pixel_timeline"):
@@ -1385,7 +1402,60 @@ class PortableWindow(QMainWindow):
             return
         frame = self.current_pixel_frame().duplicate()
         port = self.selected_port() or AUTO_PORT
-        self.start_operation(lambda: transmit_graphic(port, frame, label="A"))
+        self.start_operation(lambda: transmit_graphic(port, frame))
+
+    def pixel_initialize_graphics_support(self) -> None:
+        if self.busy:
+            return
+        if not self.connection_ready:
+            self.update_pixel_status("Connect to a serial adapter before initializing graphics support.")
+            self.update_send_enabled()
+            return
+        port = self.selected_port() or AUTO_PORT
+        self.start_operation(lambda: inspect_graphics_support(port))
+
+    def confirm_graphics_initialization(self, diagnostic: ConnectionDiagnostic) -> None:
+        if not diagnostic.ready:
+            self.update_pixel_status(diagnostic.message)
+            return
+        details = diagnostic.message
+        if "Graphics support is initialized." in details:
+            self.update_pixel_status(details)
+            return
+        proposed = "\n".join([
+            "A: TEXT primary message",
+            "B: TEXT graphics wrapper",
+            "C: TEXT reserved normal message",
+            "D: DOTS 07x07, color 2000",
+        ])
+        answer = QMessageBox.warning(
+            self,
+            "Initialize Graphics Support?",
+            (
+                f"{details}\n\n"
+                "Proposed memory directory:\n"
+                f"{proposed}\n\n"
+                "This will reconfigure sign memory. Stored messages may be erased or redefined. "
+                "App-managed TEXT A/B/C will be restored with GREEN OK after verification."
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            port = diagnostic.port or self.selected_port() or AUTO_PORT
+            self.start_operation(lambda: initialize_graphics_support(port))
+        else:
+            self.update_pixel_status("Graphics initialization canceled.")
+
+    def pixel_return_to_text(self) -> None:
+        if self.busy:
+            return
+        if not self.connection_ready:
+            self.update_pixel_status("Connect to a serial adapter before returning to text.")
+            self.update_send_enabled()
+            return
+        port = self.selected_port() or AUTO_PORT
+        self.start_operation(lambda: return_to_text(port))
 
     def live_reset_source(self) -> None:
         self.live_source = DinoRunnerSource()
@@ -1870,6 +1940,10 @@ class PortableWindow(QMainWindow):
             self.forget_adapter_action.setEnabled(not self.busy)
         if hasattr(self, "pixel_send_button"):
             self.pixel_send_button.setEnabled(not self.busy and self.connection_ready)
+        if hasattr(self, "pixel_init_button"):
+            pixel_controls_enabled = not self.busy and self.connection_ready
+            self.pixel_init_button.setEnabled(pixel_controls_enabled)
+            self.pixel_return_text_button.setEnabled(pixel_controls_enabled)
         if hasattr(self, "live_start_button"):
             self.live_update_controls()
         text = self.message.text()
@@ -2120,6 +2194,10 @@ class PortableWindow(QMainWindow):
         self.set_connection_view(result)
         self.transmit_status.setText(result.message)
         if result.source == "graphics" and hasattr(self, "pixel_status"):
+            self.pixel_status.setText(result.message)
+        if result.source == "graphics-inspect" and hasattr(self, "pixel_status"):
+            self.confirm_graphics_initialization(result)
+        if result.source in {"graphics-init", "graphics-return"} and hasattr(self, "pixel_status"):
             self.pixel_status.setText(result.message)
         self.update_library_actions()
         if result.ready and result.source == "transmit":

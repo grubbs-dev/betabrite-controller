@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from betabrite_controller import __version__
 from betabrite_controller.controller import BetaBriteController
+from betabrite_controller.diagnostics import describe_text_trace, trace_packet
 from betabrite_controller.desktop_controls import MessageDraft
 from betabrite_controller.devices import resolve_device, SerialDevice, DeviceNotFoundError
 from betabrite_controller.settings import AppSettings, DevicePreference, save_settings, load_settings, remember_device, forget_device
@@ -95,6 +96,20 @@ class ReleaseBehaviorTests(unittest.TestCase):
         payload = sign_class.return_value.send.call_args.args[0].to_bytes()
         self.assertEqual(payload, bytes.fromhex(
             "0000000000015a303002ff41411b26621c321712073148454c4c4f073011033033393504"))
+
+    def test_known_good_plain_text_recovery_packet_is_traced_from_production_encoder(self):
+        packet = BetaBriteController(port="COM7").build_packet("TEST", mode_name="hold")
+        trace = trace_packet(packet)
+
+        self.assertEqual(trace.encoded, bytes.fromhex(
+            "0000000000015a303002ff41411b26621c4354455354033032433904"))
+        self.assertEqual(trace.wire_chunks, [
+            bytes.fromhex("0000000000015a303002"),
+            bytes.fromhex("41411b26621c4354455354033032433904"),
+        ])
+        description = "\n".join(describe_text_trace(trace))
+        self.assertIn("WRITE_TEXT command", description)
+        self.assertIn("text file label A", description)
 
     def test_bundled_project_license_and_notices_match_sources(self):
         root = Path(__file__).resolve().parents[1]

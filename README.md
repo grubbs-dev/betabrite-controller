@@ -8,13 +8,13 @@ Compose messages, choose colors and effects, save favorites, and manage named si
 
 ## Download and install
 
-Get your platform's installer from [GitHub Releases](https://github.com/grubbs-dev/betabrite-controller/releases). Release preparation currently targets **1.4.0**, continuing the existing version history. See [release validation](docs/RELEASE_VALIDATION.md) before treating an unreleased build as production-ready.
+Get your platform's installer from [GitHub Releases](https://github.com/grubbs-dev/betabrite-controller/releases). Release preparation currently targets **1.4.1**, continuing the existing version history. See [release validation](docs/RELEASE_VALIDATION.md) before treating an unreleased build as production-ready.
 
 | Operating system | Download | Installation |
 | --- | --- | --- |
-| Windows 10/11 x64 | `BetaBrite-Controller-1.4.0-Windows-x64[-unsigned]-Setup.exe` | Open the installer, then launch from Start |
-| macOS Apple Silicon | `betabrite-controller-1.4.0-macos-arm64[-unsigned].dmg` | Open the disk image and drag BetaBrite Controller to Applications |
-| Linux x86_64 | `BetaBrite-Controller-1.4.0-Linux-x86_64.AppImage` | Allow execution in file Properties, then double-click |
+| Windows 10/11 x64 | `BetaBrite-Controller-1.4.1-Windows-x64[-unsigned]-Setup.exe` | Open the installer, then launch from Start |
+| macOS Apple Silicon | `betabrite-controller-1.4.1-macos-arm64[-unsigned].dmg` | Open the disk image and drag BetaBrite Controller to Applications |
+| Linux x86_64 | `BetaBrite-Controller-1.4.1-Linux-x86_64.AppImage` | Allow execution in file Properties, then double-click |
 
 Brackets indicate an optional filename suffix, not literal characters. Windows and macOS development builds without signing credentials are labeled `-unsigned`; do not assume they are signed or notarized. Intel Macs are not a release target. Linux builds target Ubuntu 24.04 or newer and comparable desktop distributions; AppImage does not remove system-library compatibility requirements.
 
@@ -36,7 +36,7 @@ The application remains usable without a sign attached. You can compose and save
 - USB adapter discovery, explicit port selection, reconnect, and remembered hardware identity
 - Multiple named signs, with one sign active at a time
 - Colors, display modes, special effects, speed 1–5, flashing and wide text
-- Pixel Studio for drawing 90 x 7 BetaBrite-compatible pixel graphics, editing frames, previewing local animations, and saving `.bbpixel` artwork
+- Pixel Studio for drawing 90 x 7 BetaBrite-compatible pixel graphics, editing frames, previewing local animations, and saving `.bbpixel` artwork. Static physical graphics are validated on the tested BetaBrite/Alpha 213C-1 Series B after explicit graphics memory initialization.
 - Live Mode for running framebuffer sources locally, including an original tiny runner demo and virtual benchmark diagnostics
 - Saved messages, the latest 20 successful messages, and reusable presets
 - Background transmission with duplicate-send protection
@@ -49,13 +49,13 @@ Messages use the existing ASCII encoding; other characters display as `?`. Align
 
 Open **Pixel Studio** from the sidebar to draw custom SMALL DOTS graphics. One editor cell is one sign pixel. The default canvas is 90 columns by 7 rows for classic one-line BetaBrite-style signs, while the saved `.bbpixel` format records width, height, frame durations, loop metadata, and protocol-compatible colors.
 
-Static graphics can be sent to compatible signs through the same READY-gated background worker used by normal messages. Multi-frame artwork can be previewed locally; native sign-side timed animation upload is not advertised because the supported protocol path only proves storing individual DOTS files and calling them from TEXT files. See [Pixel Studio protocol notes](docs/pixel-studio-protocol.md).
+Multi-frame artwork can be previewed locally. Static physical SMALL DOTS display is validated on the tested BetaBrite/Alpha 213C-1 Series B using DOTS file `D` and normal TEXT wrapper `B`, but only after the sign memory directory has been initialized for graphics. See [Pixel Studio protocol notes](docs/pixel-studio-protocol.md).
 
 ## Live Mode
 
 Open **Live Mode** to run generated framebuffer sources through the local preview. The first source is an original tiny 7-pixel endless runner. Space or Up jumps, R restarts, and Escape stops Live Mode.
 
-Live Mode separates game simulation from physical sign output. The preview can run smoothly while future hardware transports use a measured lower FPS. The current confirmed custom-graphics protocol writes SMALL DOTS files, and volatile sign storage has not been proven, so rapid physical framebuffer streaming is blocked to protect sign memory. The page clearly shows **VIRTUAL PREVIEW ONLY** rather than implying hardware output.
+Live Mode separates game simulation from physical sign output. The preview can run smoothly while future hardware transports use a measured lower FPS. The static custom-graphics protocol writes SMALL DOTS files, and volatile sign storage has not been proven, so rapid physical framebuffer streaming is blocked to protect sign memory. The page clearly shows **VIRTUAL PREVIEW ONLY** rather than implying hardware output.
 
 Use the virtual benchmark controls or `betabrite --live-benchmark-virtual` to measure scheduler/encoder behavior without hardware. See [Live Mode](docs/live-mode.md).
 
