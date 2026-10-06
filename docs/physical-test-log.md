@@ -90,6 +90,16 @@ Physical result: PASS. The sign displayed exactly `GREEN OK` in steady green.
 
 Pixel Studio graphics display no longer uses Priority TEXT file `0` as the wrapper. The graphics sequence now first sends the documented Priority TEXT stop packet, stores one SMALL DOTS file, then writes a normal TEXT wrapper label `B` that calls the graphic. `text_label="0"` is rejected by the graphics encoder.
 
+## Physical Graphics Validation
+
+Operation: one 7 x 7 diagnostic SMALL DOTS graphic, green `X` pattern, stored once as DOTS file `A`, then displayed through normal TEXT wrapper `B` containing `14H` + `A`.
+
+Physical result: FAIL. The sign alternated between `GREEN OK` and literal `A`. No 7 x 7 green `X` appeared.
+
+Interpretation: normal TEXT file `B` was active, but the `14H` + `A` sequence was not honored as a SMALL DOTS call on this physical sign state. The `14H` control byte appeared to be ignored or unsupported, leaving the printable graphic label `A`. The stored DOTS file may exist; it was left untouched after the failed display test.
+
+Cleanup: normal TEXT file `B` was overwritten once with `GREEN OK`, HOLD mode, fixed green, to remove the `14H` + `A` graphic reference without deleting or rewriting the SMALL DOTS file.
+
 ## Stop State
 
-No Pixel Studio, DOTS graphics, Live Mode, Dino, benchmark, fuzzing, repeated sends, or memory reallocation commands were sent during this diagnostic. Physical normal text is validated; physical graphics remain unverified.
+No Live Mode, Dino, benchmark, fuzzing, repeated graphics writes, SMALL DOTS delete, or memory reallocation commands were sent during this diagnostic. Physical normal text is validated; physical graphics display is not validated.

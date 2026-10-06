@@ -36,7 +36,7 @@ The application remains usable without a sign attached. You can compose and save
 - USB adapter discovery, explicit port selection, reconnect, and remembered hardware identity
 - Multiple named signs, with one sign active at a time
 - Colors, display modes, special effects, speed 1–5, flashing and wide text
-- Pixel Studio for drawing 90 x 7 BetaBrite-compatible pixel graphics, editing frames, previewing local animations, and saving `.bbpixel` artwork
+- Pixel Studio for drawing 90 x 7 BetaBrite-compatible pixel graphics, editing frames, previewing local animations, and saving `.bbpixel` artwork. Physical graphics display remains under investigation for the tested sign.
 - Live Mode for running framebuffer sources locally, including an original tiny runner demo and virtual benchmark diagnostics
 - Saved messages, the latest 20 successful messages, and reusable presets
 - Background transmission with duplicate-send protection
@@ -49,13 +49,13 @@ Messages use the existing ASCII encoding; other characters display as `?`. Align
 
 Open **Pixel Studio** from the sidebar to draw custom SMALL DOTS graphics. One editor cell is one sign pixel. The default canvas is 90 columns by 7 rows for classic one-line BetaBrite-style signs, while the saved `.bbpixel` format records width, height, frame durations, loop metadata, and protocol-compatible colors.
 
-Static graphics can be sent to compatible signs through the same READY-gated background worker used by normal messages. Multi-frame artwork can be previewed locally; native sign-side timed animation upload is not advertised because the supported protocol path only proves storing individual DOTS files and calling them from TEXT files. See [Pixel Studio protocol notes](docs/pixel-studio-protocol.md).
+Multi-frame artwork can be previewed locally. Physical SMALL DOTS display is not yet advertised as validated for the tested BetaBrite 213C-1 Series B because the current `14H` + label wrapper rendered as literal text on hardware. See [Pixel Studio protocol notes](docs/pixel-studio-protocol.md).
 
 ## Live Mode
 
 Open **Live Mode** to run generated framebuffer sources through the local preview. The first source is an original tiny 7-pixel endless runner. Space or Up jumps, R restarts, and Escape stops Live Mode.
 
-Live Mode separates game simulation from physical sign output. The preview can run smoothly while future hardware transports use a measured lower FPS. The current confirmed custom-graphics protocol writes SMALL DOTS files, and volatile sign storage has not been proven, so rapid physical framebuffer streaming is blocked to protect sign memory. The page clearly shows **VIRTUAL PREVIEW ONLY** rather than implying hardware output.
+Live Mode separates game simulation from physical sign output. The preview can run smoothly while future hardware transports use a measured lower FPS. The researched custom-graphics protocol writes SMALL DOTS files, physical display invocation is not yet proven, and volatile sign storage has not been proven, so rapid physical framebuffer streaming is blocked to protect sign memory. The page clearly shows **VIRTUAL PREVIEW ONLY** rather than implying hardware output.
 
 Use the virtual benchmark controls or `betabrite --live-benchmark-virtual` to measure scheduler/encoder behavior without hardware. See [Live Mode](docs/live-mode.md).
 
