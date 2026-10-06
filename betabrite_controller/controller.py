@@ -173,7 +173,7 @@ class BetaBriteController:
 
         return content
 
-    def send(
+    def build_packet(
         self,
         message="",
         color_name="auto",
@@ -183,6 +183,7 @@ class BetaBriteController:
         flash=False,
         wide=False,
     ):
+        """Build the production text packet without opening serial hardware."""
         if mode_name not in MODES:
             raise ValueError(
                 f"Unknown display mode: {mode_name}"
@@ -214,6 +215,32 @@ class BetaBriteController:
             display_mode = MODES[mode_name]
             special_mode = None
 
+        packet = Packet(
+            type_code=self.type_code,
+            address=self.address,
+        )
+
+        packet.add(
+            WriteText(
+                content,
+                label="A",
+                position=DisplayPosition.FILL,
+                mode=display_mode,
+                special_mode=special_mode,
+            )
+        )
+        return packet
+
+    def send(
+        self,
+        message="",
+        color_name="auto",
+        mode_name="rotate",
+        special_name=None,
+        speed_level=None,
+        flash=False,
+        wide=False,
+    ):
         port = resolve_port(self.port)
         self.last_port = port
 
@@ -236,19 +263,14 @@ class BetaBriteController:
             # pyserial handle so a disconnected/stalled adapter cannot hang UI shutdown.
             sign._ser.write_timeout = 5
 
-            packet = Packet(
-                type_code=self.type_code,
-                address=self.address,
-            )
-
-            packet.add(
-                WriteText(
-                    content,
-                    label="A",
-                    position=DisplayPosition.FILL,
-                    mode=display_mode,
-                    special_mode=special_mode,
-                )
+            packet = self.build_packet(
+                message=message,
+                color_name=color_name,
+                mode_name=mode_name,
+                special_name=special_name,
+                speed_level=speed_level,
+                flash=flash,
+                wide=wide,
             )
 
             sign.send(packet)

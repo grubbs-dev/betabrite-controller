@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from alphasign import DisplayMode, DisplayPosition, Packet, Sign, SignType, WriteText
+from alphasign.protocol import EOT, SOH, STX, SYNC
 from alphasign.commands.dots import WriteSmallDots
 
 from .connection import BetaBriteTransportError, classify_transport_exception
@@ -14,7 +15,9 @@ from .pixel_model import PixelAnimation, PixelFrame
 
 DEFAULT_GRAPHIC_LABELS = "ABCDEFGHIJKLMNPQRSTUVWXYZ"
 CALL_SMALL_DOTS = b"\x14"
-DEFAULT_GRAPHIC_TEXT_LABEL = "0"
+DEFAULT_GRAPHIC_TEXT_LABEL = "B"
+PRIORITY_TEXT_LABEL = "0"
+STOP_PRIORITY_TEXT_PACKET = b"\x00\x00\x00\x00\x00\x01Z00\x02A0\x04"
 
 
 class GraphicsProtocolError(ValueError):
@@ -34,6 +37,21 @@ def validate_graphic_label(label: str) -> None:
         raise GraphicsProtocolError("Graphic labels must be exactly one character")
     if not label.isalnum():
         raise GraphicsProtocolError("Graphic labels must be alphanumeric")
+
+
+def validate_display_text_label(label: str) -> None:
+    validate_graphic_label(label)
+    if label == PRIORITY_TEXT_LABEL:
+        raise GraphicsProtocolError(
+            "Priority TEXT file 0 is reserved for recovery; use a normal TEXT label for graphics display"
+        )
+
+
+def encode_stop_priority_text(*, type_code: bytes = b"Z", address: str = "00") -> bytes:
+    """Encode the documented command that disables Priority TEXT file 0."""
+    if type_code == b"Z" and address == "00":
+        return STOP_PRIORITY_TEXT_PACKET
+    return SYNC + SOH + type_code + address.encode() + STX + b"A0" + EOT
 
 
 def encode_graphic(frame: PixelFrame, *, label: str = "A", type_code: bytes = b"Z", address: str = "00") -> bytes:
@@ -58,7 +76,7 @@ def encode_display_graphic(
 ) -> bytes:
     """Encode a TEXT file that calls a stored SMALL DOTS PICTURE file."""
     validate_graphic_label(graphic_label)
-    validate_graphic_label(text_label)
+    validate_display_text_label(text_label)
     content = CALL_SMALL_DOTS + graphic_label.encode("ascii")
     command = WriteText(
         content,
@@ -79,6 +97,7 @@ def encode_static_graphic_sequence(
 ) -> list[bytes]:
     """Return packets needed to store and display one SMALL DOTS graphic."""
     return [
+        encode_stop_priority_text(type_code=type_code, address=address),
         encode_graphic(frame, label=graphic_label, type_code=type_code, address=address),
         encode_display_graphic(
             graphic_label=graphic_label,
@@ -171,6 +190,7 @@ class BetaBriteGraphicsController:
     def display_graphic(self, *, graphic_label: str = "A", text_label: str = DEFAULT_GRAPHIC_TEXT_LABEL) -> None:
         self._send_packets(
             [
+                encode_stop_priority_text(type_code=self.type_code, address=self.address),
                 encode_display_graphic(
                     graphic_label=graphic_label,
                     text_label=text_label,
@@ -199,4 +219,3 @@ class SimulatedBetaBriteTransport:
 
     def send_static_graphic(self, frame: PixelFrame, *, graphic_label: str = "A") -> None:
         self.payloads.extend(encode_static_graphic_sequence(frame, graphic_label=graphic_label))
-

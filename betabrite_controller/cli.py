@@ -16,6 +16,7 @@ from .controller import (
     SPECIALS,
 )
 from .benchmark import physical_live_benchmark_blocked_report, run_virtual_benchmark_suite
+from .diagnostics import describe_text_trace, trace_packet
 from .devices import (
     device_matches_preference,
     diagnose_device,
@@ -102,6 +103,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--check-connection",
         action="store_true",
         help="Actively verify that the selected serial port can be opened",
+    )
+    parser.add_argument(
+        "--hardware-diagnostic",
+        action="store_true",
+        help="Run a conservative hardware diagnostic trace; does not send unless --diagnostic-send is also provided",
+    )
+    parser.add_argument(
+        "--diagnostic-message",
+        default="TEST",
+        help="Plain text to encode for --hardware-diagnostic (default: TEST)",
+    )
+    parser.add_argument(
+        "--diagnostic-send",
+        action="store_true",
+        help="With --hardware-diagnostic, send the printed packet once",
     )
     parser.add_argument(
         "--remember-port",
@@ -223,6 +239,62 @@ def print_connection_check(port: str) -> int:
     return 0 if diagnostic.ready else 2
 
 
+def print_hardware_diagnostic(args) -> int:
+    controller = BetaBriteController(port=args.port)
+    diagnostic = controller.check_connection()
+
+    print("\nBetaBrite hardware diagnostic:")
+    print(f"  state:      {diagnostic.state.upper()}")
+    if diagnostic.port:
+        print(f"  port:       {diagnostic.port}")
+    if diagnostic.source:
+        print(f"  selected:   {diagnostic.source}")
+    print("  serial:     9600 baud, 7 data bits, even parity, 1 stop bit, DTR off")
+    print(f"  detail:     {diagnostic.message}")
+
+    if not diagnostic.ready:
+        return 2
+
+    packet = controller.build_packet(
+        message=args.diagnostic_message,
+        color_name=args.color,
+        mode_name=args.mode,
+        special_name=args.special,
+        speed_level=args.speed,
+        flash=args.flash,
+        wide=args.wide,
+    )
+    trace = trace_packet(packet)
+    print("\nProduction text packet trace:")
+    for line in describe_text_trace(trace):
+        print(f"  {line}")
+
+    if not args.diagnostic_send:
+        print("\nSend:       skipped. Re-run with --diagnostic-send to transmit this packet once.")
+        return 0
+
+    try:
+        controller.send(
+            message=args.diagnostic_message,
+            color_name=args.color,
+            mode_name=args.mode,
+            special_name=args.special,
+            speed_level=args.speed,
+            flash=args.flash,
+            wide=args.wide,
+        )
+    except BetaBriteTransportError as exc:
+        label = exc.state.replace("-", " ").upper()
+        print(f"\nBetaBrite {label}: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"\nBetaBrite error: {exc}", file=sys.stderr)
+        return 1
+
+    print("\nSend:       transmitted once; the sign does not acknowledge display updates.")
+    return 0
+
+
 def print_benchmark_report(report, path: str | None = None) -> None:
     text = report.to_json()
     if path:
@@ -248,6 +320,9 @@ def main(argv=None):
 
     if args.check_connection:
         return print_connection_check(args.port)
+
+    if args.hardware_diagnostic:
+        return print_hardware_diagnostic(args)
 
     if args.remember_port is not None:
         try:
