@@ -20,15 +20,15 @@
 
 The normal text path is unchanged from `v1.0.0` through `v1.4.0` except for device discovery/error handling around the same encoder. It writes a TEXT file with file label `A`. The literal byte `0x41` appears twice at the start of a normal text command body: once as the `WRITE_TEXT` command and once as text file label `A`.
 
-Pixel Studio previously defaulted to SMALL DOTS label `A`, then wrote Priority TEXT file `0` containing `0x14` plus graphic label `A` to display that graphic. Physical graphics remain unverified.
+Pixel Studio previously defaulted to SMALL DOTS label `A`, then wrote Priority TEXT file `0` containing `0x14` plus graphic label `A` to display that graphic. Physical graphics are now validated only after explicit memory configuration that allocates a DOTS file first.
 
 Most likely root cause for a sign showing only `A`:
 
-Pixel Studio's graphics display wrapper wrote Priority TEXT file `0` with a SMALL DOTS call to graphic `A`. If the call byte was ignored or the DOTS file was unusable, the printable residue was `A`. Because Priority TEXT file `0` masks ordinary TEXT files, subsequent normal text writes to file `A` completed but did not become visible until Priority TEXT file `0` was stopped.
+Pixel Studio's earlier graphics path wrote/invoked a DOTS graphic without first configuring a DOTS file in the sign's memory directory. Because the DOTS label was not allocated, the wrapper rendered the literal label (`A`) instead of a graphic. The problem was amplified when the wrapper lived in Priority TEXT file `0`, which masked ordinary TEXT files until the priority file was stopped.
 
 Other considered explanations, ranked lower:
 
-1. A DOTS/text label collision or missing graphics memory setup caused the sign to render residual label data instead of graphic content.
+1. A DOTS/text label collision contributed to ambiguity in the first test, but the confirmed failure was missing DOTS memory setup.
 2. Serial framing/parity mismatch during an attempted write caused the sign to accept only a small residue of the command.
 3. A current normal-text encoder regression is unlikely; historical text packet structure matches the released path.
 
@@ -88,7 +88,7 @@ Physical result: PASS. The sign displayed exactly `GREEN OK` in steady green.
 
 ## Code Fix
 
-Pixel Studio graphics display no longer uses Priority TEXT file `0` as the wrapper. The graphics sequence now first sends the documented Priority TEXT stop packet, stores one SMALL DOTS file, then writes a normal TEXT wrapper label `B` that calls the graphic. `text_label="0"` is rejected by the graphics encoder.
+Pixel Studio graphics display no longer uses Priority TEXT file `0` as the wrapper. Physical graphics sends must verify a compatible DOTS allocation before sending, store the graphic in DOTS `D`, then write normal TEXT wrapper label `B` that calls the graphic with `14H` + `D`. `text_label="0"` is rejected by the graphics encoder.
 
 ## Physical Graphics Validation
 
@@ -100,6 +100,40 @@ Interpretation: normal TEXT file `B` was active, but the `14H` + `A` sequence wa
 
 Cleanup: normal TEXT file `B` was overwritten once with `GREEN OK`, HOLD mode, fixed green, to remove the `14H` + `A` graphic reference without deleting or rewriting the SMALL DOTS file.
 
+## Physical Graphics Validation With Allocated DOTS
+
+Stage A: wrote one memory configuration containing TEXT `A`, TEXT `B`, TEXT `C`, and DOTS `D` (`07 x 07`, 3-color status `2000`). Read-only `F$` returned:
+
+```text
+E$AAU0100FF00BAU00ABFF00CAU00ABFF00DDU07072000
+```
+
+Checksum: PASS (`0AAE`).
+
+Stage B: rewrote TEXT `A` once with `GREEN OK`, HOLD mode, fixed green. Physical normal text remained healthy.
+
+Stage C: wrote one 7 x 7 green `X` to DOTS `D`, then read it back with `JD`. The response checksum passed (`0B05`) and the returned matrix exactly matched:
+
+```text
+2000002
+0200020
+0020200
+0002000
+0020200
+0200020
+2000002
+```
+
+Stage D: wrote normal TEXT wrapper `B`, HOLD mode, containing `14H` + `D`. Physical result: PASS. The sign alternated between `GREEN OK` and the correctly rendered green 7 x 7 `X`.
+
+Read-only run-sequence query `F.` returned:
+
+```text
+E.TUABC
+```
+
+Checksum: PASS (`01E7`). The sign currently runs TEXT files `A`, `B`, and `C` in the default/timed run sequence, explaining why the normal text and graphic wrapper alternate.
+
 ## Memory Configuration Preflight
 
 The prepared rollback packet restores the previous memory directory/layout only.
@@ -109,4 +143,4 @@ configuration change.
 
 ## Stop State
 
-No Live Mode, Dino, benchmark, fuzzing, repeated graphics writes, SMALL DOTS delete, or memory reallocation commands were sent during this diagnostic. Physical normal text is validated; physical graphics display is not validated.
+No Live Mode, Dino, benchmark, fuzzing, repeated graphics writes, SMALL DOTS delete, or automatic rollback commands were sent during this diagnostic. Physical normal text is validated, and physical custom graphics are validated on the tested BetaBrite/Alpha 213C-1 Series B when the DOTS file is explicitly allocated first.

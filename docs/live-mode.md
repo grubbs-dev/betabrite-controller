@@ -45,12 +45,12 @@ unbounded backlog of historical frames.
 
 ## Hardware Safety
 
-The researched BetaBrite custom graphics path writes **SMALL DOTS PICTURE
+The validated BetaBrite static graphics path writes **SMALL DOTS PICTURE
 files** and then references those files from TEXT files. Physical testing on the
-tested BetaBrite 213C-1 Series B has not yet proven the TEXT-file invocation
-mechanism: `14H` + graphic label rendered as literal text instead of the stored
-graphic. The available documentation and the current implementation also do
-**not** prove that repeated writes target volatile RAM.
+tested BetaBrite/Alpha 213C-1 Series B proves the static sequence only after a
+compatible DOTS file is allocated first. The available documentation and the
+current implementation do **not** prove that repeated writes target volatile
+RAM.
 
 Because the write path may use persistent sign file storage, BetaBrite
 Controller **does not use SMALL DOTS writes for rapid physical Live Mode
