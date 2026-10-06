@@ -100,6 +100,13 @@ Interpretation: normal TEXT file `B` was active, but the `14H` + `A` sequence wa
 
 Cleanup: normal TEXT file `B` was overwritten once with `GREEN OK`, HOLD mode, fixed green, to remove the `14H` + `A` graphic reference without deleting or rewriting the SMALL DOTS file.
 
+## Memory Configuration Preflight
+
+The prepared rollback packet restores the previous memory directory/layout only.
+It does not restore previous TEXT file contents. Existing TEXT contents may be
+destroyed by memory reconfiguration and must be rewritten separately after any
+configuration change.
+
 ## Stop State
 
 No Live Mode, Dino, benchmark, fuzzing, repeated graphics writes, SMALL DOTS delete, or memory reallocation commands were sent during this diagnostic. Physical normal text is validated; physical graphics display is not validated.

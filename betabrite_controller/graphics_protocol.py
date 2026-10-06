@@ -152,7 +152,11 @@ def encode_minimal_graphics_memory_config(
 
 
 def encode_current_text_memory_config_rollback(*, type_code: bytes = b"Z", address: str = "00") -> bytes:
-    """Encode the exact read-back three-TEXT-file memory layout for rollback."""
+    """Encode the exact read-back three-TEXT-file memory directory for rollback.
+
+    This restores layout only. Memory reconfiguration can destroy file contents,
+    so TEXT files must be rewritten separately after rollback.
+    """
     entries = [
         _text_memory_entry("A", CURRENT_TEXT_FILE_SIZES["A"]),
         _text_memory_entry("B", CURRENT_TEXT_FILE_SIZES["B"]),
